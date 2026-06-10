@@ -1,0 +1,8 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "command": "lightpick auth status 2>/dev/null || echo '[LightPick] Not authenticated. Run: lightpick auth login'"
+    }
+  ]
+}

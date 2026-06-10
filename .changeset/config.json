@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "master",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "@lightpick/web",
+    "@lightpick/api-cf",
+    "@lightpick/gateway",
+    "@lightpick/render-server",
+    "@lightpick/remotion-components",
+    "@lightpick/remotion-core",
+    "@lightpick/remotion-ui",
+    "@lightpick/claude-code-plugin",
+    "@lightpick/shared-types",
+    "@lightpick/shared-layout"
+  ]
+}

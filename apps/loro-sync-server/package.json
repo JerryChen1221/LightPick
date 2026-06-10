@@ -1,0 +1,25 @@
+{
+  "name": "loro-sync-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "db:migrate:local": "wrangler d1 migrations apply lightpick-d1 --local",
+    "dev": "wrangler dev --port 8789 --inspector-port 9231",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "@lightpick/shared-types": "workspace:*",
+    "hono": "^4.11.1",
+    "loro-crdt": "^1.10.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.55.0"
+  }
+}

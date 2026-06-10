@@ -1,0 +1,111 @@
+# OSS reference config for self-hosters. The hosted lightpick.video deploy lives
+# in lightpick-hosted/apps/web-hosted/wrangler.toml — that one points its `main`
+# at this directory's workers/app.ts via the OSS git submodule.
+
+name = "lightpick-web"
+main = "workers/app.ts"
+compatibility_date = "2025-04-08"
+compatibility_flags = ["nodejs_compat"]
+
+# Let CF run the Worker close to the bindings it talks to most (D1 in
+# this case). Without smart placement the Worker runs near the user, and
+# every D1 round-trip pays cross-region RTT (200-400ms over CN→SIN).
+[placement]
+mode = "smart"
+
+[assets]
+binding = "ASSETS"
+directory = "./dist/client"
+not_found_handling = "single-page-application"
+# Only route dynamic paths through the Worker — static SPA assets
+# (/_app/*, /favicon, the SPA shell at /) go straight from the assets
+# layer + CF edge cache, served from the user's nearest colo.
+#
+# Without this list any text/html GET (incl. /api/better-auth/callback/google)
+# would be answered by the SPA fallback before the Worker saw it; with
+# the list, OAuth callback / API / WS upgrade paths still hit the Worker
+# first and decide whether to fall through to env.ASSETS for the shell.
+run_worker_first = [
+  "/api/*",
+  "/sync/*",
+  "/agents/*",
+  "/assets/*",
+  "/thumbnails/*",
+  "/upload",
+  "/upload/*",
+  "/health",
+]
+
+# D1 (shared with api-cf for users / sessions / app tables)
+[[d1_databases]]
+binding = "DB"
+database_name = "lightpick-d1"
+database_id = "00000000-0000-0000-0000-000000000000"  # Replace with your D1 id (`wrangler d1 create lightpick-d1` prints it)
+migrations_dir = "drizzle"
+
+# Service binding to api-cf worker. Self-hosters point this at their own
+# api-cf deploy; the hosted overlay overrides this to lightpick-api-hosted.
+[[services]]
+binding = "API_CF"
+service = "lightpick-api"
+
+# R2 bucket (used by /api/upload/asset + /api/assets/view/*)
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "lightpick-r2"
+
+[vars]
+BETTER_AUTH_BASE_PATH = "/api/better-auth"
+# Dev fallback when the service binding can't resolve api-cf (e.g. running
+# wrangler dev for one Worker but not the other).
+API_CF_URL = "http://127.0.0.1:8789"
+
+[dev]
+port = 3001
+ip = "0.0.0.0"
+
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  [env.staging] — DO NOT COMMIT real resource IDs upstream.       ║
+# ║  This section binds the staging worker to PRODUCTION data        ║
+# ║  (lightpick-frontend D1 + lightpick-assets R2). The OSS    ║
+# ║  template should keep placeholder IDs only.                      ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# Deploy with:  wrangler deploy --env staging   (or `make deploy-web-staging`)
+[env.staging]
+name = "lightpick-web-staging"
+
+[env.staging.placement]
+mode = "smart"
+
+[env.staging.assets]
+binding = "ASSETS"
+directory = "./dist/client"
+not_found_handling = "single-page-application"
+run_worker_first = [
+  "/api/*",
+  "/sync/*",
+  "/agents/*",
+  "/assets/*",
+  "/thumbnails/*",
+  "/upload",
+  "/upload/*",
+  "/health",
+]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "lightpick-frontend"
+database_id = "aab16eeb-a375-490b-ad1e-cd092cd9f4bb"
+migrations_dir = "drizzle"
+
+[[env.staging.services]]
+binding = "API_CF"
+service = "lightpick-api-staging"
+
+[[env.staging.r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "lightpick-assets"
+
+[env.staging.vars]
+BETTER_AUTH_BASE_PATH = "/api/better-auth"

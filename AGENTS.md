@@ -1,0 +1,200 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Critical Rules
+
+- **No foreign keys.** Never add `REFERENCES`, `FOREIGN KEY`, or `.references()` in schema definitions or migrations. D1 enables foreign key enforcement and it causes issues with user IDs across auth boundaries.
+- **All `/api/v1/*` routes live in api-cf (Hono), not in Next.js.** Gateway routes `/api/v1/*` to api-cf. Never create Next.js API routes under `/api/v1/` — they will 404. Add new endpoints in `apps/api-cf/src/routes/v1/` and register them in `apps/api-cf/src/routes/v1/index.ts`. Next.js API routes (`apps/web/app/api/`) are only for paths that gateway does not intercept (e.g., `/api/better-auth/*`).
+- **Timeline/composition has three distinct frame/pixel coordinate systems** (tracks-viewport px, composition-absolute frames, Sequence-relative frames). Mixing them silently "works" for the first item (`from=0`) and fails for everything else. Before touching `buildPreview`, `updatePreviewFromDnd`, `ItemComponent`, or anything passing frame numbers into `<Sequence>`, read [`packages/remotion-ui/TIMELINE_COORDINATES.md`](packages/remotion-ui/TIMELINE_COORDINATES.md) — it lists the two historical bugs (stale `.tracks-viewport` ref, sequence-relative vs composition-absolute mismatch) with reproducers.
+
+## Build & Development Commands
+
+```bash
+# Install dependencies
+make install                # pnpm install
+
+# Development (most common)
+make dev                    # Start web (:3000) + api-cf (:8789) in parallel
+make dev-gateway-full       # Start all services behind auth gateway (:8788)
+
+# Individual services
+make dev-web                # Frontend only (:3000, Next.js + Turbopack)
+make dev-api-cf             # API only (:8789, Wrangler)
+make dev-gateway            # Auth gateway only (:8788)
+make dev-render             # Render server only (:8080)
+
+# Database
+make db-local               # Run D1 migrations locally (web + api-cf)
+
+# Build, test, lint
+make build                  # turbo run build
+make test                   # turbo run test
+make lint                   # turbo run lint
+make format                 # prettier on all TS/JSON/MD
+
+# Per-app testing
+cd apps/api-cf && pnpm test           # API unit tests (vitest)
+cd apps/api-cf && pnpm test:watch     # API tests in watch mode
+cd apps/api-cf && pnpm test:integration  # Integration tests
+
+# Remotion
+make remotion-bundle        # Build Remotion video bundle
+```
+
+**After completing a task, run `make lint` to verify.** Do not run `make build` — the project uses hot-reload in dev.
+
+## Architecture
+
+### Monorepo Structure
+
+pnpm workspaces + Turborepo. All apps deploy to **Cloudflare** (Workers / Pages).
+
+| Directory | What | Runtime |
+|-----------|------|---------|
+| `apps/web` | Next.js 15 frontend (React 19, Tailwind CSS v4) | Cloudflare Pages via OpenNext |
+| `apps/api-cf` | Hono API + Durable Objects + Workflows | Cloudflare Workers |
+| `apps/auth-gateway` | Reverse proxy, auth validation, request routing | Cloudflare Workers |
+| `apps/render-server` | Remotion video rendering (Node.js) | Cloudflare Containers |
+| `apps/loro-sync-server` | Legacy CRDT sync (functionality merged into api-cf) | Cloudflare Workers |
+| `packages/shared-types` | Zod schemas, TS types, model cards, Loro operations | Shared library |
+| `packages/shared-layout` | Canvas node layout algorithms (zero deps) | Shared library |
+| `packages/cli` | Terminal CLI (`lightpick` command) for project/canvas ops | Node.js |
+| `packages/claude-code-plugin` | Claude Code integration (skills, hooks) | Plugin |
+| `packages/remotion-*` | Video editor: core state, components, UI | Shared libraries |
+
+### Gateway Pattern (Request Flow)
+
+```
+User/CLI → Auth Gateway (:8788)
+  ├─ /               → Web Frontend (:3000)
+  ├─ /sync/:projectId → ProjectRoom DO (WebSocket, Loro CRDT binary sync)
+  ├─ /agents/*       → SupervisorAgent DO (AI chat WebSocket)
+  ├─ /api/v1/*       → REST API (projects CRUD, authenticated)
+  ├─ /api/tasks/*    → Task submission & polling (unauthenticated)
+  ├─ /api/generate/* → Image/video generation endpoints
+  ├─ /assets/*       → R2 asset serving (unauthenticated)
+  ├─ /upload/*       → Asset upload to R2
+  └─ /thumbnails/*   → Thumbnail generation/serving
+```
+
+Auth gateway injects `x-user-id` header for downstream services. Two auth methods: **Better Auth session** (cookie-based, browser) and **API token** (`clsh_*` prefix, CLI/agents).
+
+### Real-time Sync (Loro CRDT)
+
+Canvas state (nodes, edges) lives in **Loro CRDT** documents managed by the `ProjectRoom` Durable Object. Clients connect via WebSocket at `/sync/:projectId` and exchange binary CRDT updates. The flow:
+
+1. Client connects → receives Loro snapshot
+2. Local edits → generate CRDT update (binary) → send to ProjectRoom
+3. ProjectRoom applies update → broadcasts to all other clients
+4. Conflict resolution is automatic (CRDT properties)
+
+Relational data (users, projects, sessions, API tokens) lives in **D1** (SQLite) via **Drizzle ORM**.
+
+### Durable Objects (api-cf)
+
+- **`ProjectRoom`** (`src/agents/project-room.ts`) — Loro CRDT host, WebSocket hub, presence tracking, activity broadcasts (throttled 500ms), task polling, periodic snapshots.
+- **`SupervisorAgent`** (`src/agents/supervisor.ts`) — AI chat agent per project. Maintains Loro replica synced with ProjectRoom. Has canvas tools (list/read/create/update/delete nodes, run generation). Room name format: `projectId:agentId`.
+- **`GenerationWorkflow`** (`src/agents/generation.ts`) — Cloudflare Workflow for multi-step AIGC: generate → upload to R2 → update asset node.
+
+### AI & Generation Providers
+
+- **Image**: Google Generative AI (Gemini), Recraft
+- **Video**: Kling, FAL AI (Sora, Flux)
+- **AI Chat**: OpenAI SDK via Cloudflare AI Gateway
+- **Description**: Claude (via AI SDK)
+- Model configs centralized in `packages/shared-types/src/models.ts` — never hardcode model parameters.
+
+### Authentication
+
+**Better Auth** with Drizzle adapter on D1. Supports email/password and Google OAuth. Base path: `/api/better-auth`.
+
+API tokens: `clsh_` + 40 hex chars. Only SHA-256 hash stored in D1 (`api_token` table). Created via Settings UI, validated by auth gateway and api-cf auth module.
+
+### Collaboration Visibility
+
+Sideband JSON messages over the same WebSocket used for CRDT sync:
+- **Presence**: `{ type: "presence", clients: [...] }` — who's connected (browser/CLI)
+- **Activity**: `{ type: "activity", actor, action, nodeId, ... }` — who did what, throttled per node
+
+Types defined in `packages/shared-types/src/presence.ts`. Detected via `isSidebandMessage()` type guard (string messages vs binary CRDT).
+
+## Key Patterns
+
+### Shared Types as Single Source of Truth
+
+All schemas in `packages/shared-types`. Both frontend and backend validate against the same Zod schemas. Canvas node types, task schemas, model cards — all defined once. Python types can be generated via `pnpm generate:python`.
+
+### Canvas Operations (Loro)
+
+All canvas operations are encapsulated in the `Canvas` class (`packages/shared-types/src/canvas-ops.ts`). Instantiate with `new Canvas(doc, broadcast)` and call methods directly. **All clients (web, CLI, api-cf agents) must use this class — never re-implement layout, validation, or node creation logic in client code.**
+
+```typescript
+const canvas = new Canvas(doc, broadcast);
+
+// Read
+canvas.listNodes(type?, parentId?)
+canvas.readNode(nodeId)
+canvas.searchNodes(query, types?)
+canvas.findNode(idOrAssetId)
+canvas.getNodeStatus(idOrAssetId)
+canvas.listEdges()
+
+// Write
+canvas.createNode(id, type, data, position?, parentId?)    // auto-insert layout
+canvas.createLinkedNode({ sourceNodeId, ... })              // + edge + auto-insert
+canvas.updateNode(nodeId, updates)
+canvas.deleteNode(nodeId)
+canvas.insertEdge(edgeId, source, target, type?)
+
+// Business operations
+canvas.executeGeneration(nodeId, generateId)   // validate → buildPending → createLinkedNode
+```
+
+`executeGeneration` replaces the previously duplicated flow of read node → extract prompt/model → validate → build pending asset → create linked node. One call does everything.
+
+**Validation & builders** (in `canvas.ts`, used internally by Canvas):
+- `validateGenerationInput()` — Validates prompt + reference images against model card.
+- `buildPendingAssetNode()` — Builds pending image/video node data.
+
+**Layout** (`packages/shared-layout`, used internally by Canvas):
+- `autoInsertNode` — Calculates position (right of reference via edge, or bottom of group) + chainPush.
+- `relayoutToGrid` — Full grid relayout for the relayout button.
+
+**Rules:**
+- Reference images come from prompt parts (inline `@`-mentions via `parsePromptParts`), not from connected upstream nodes.
+- Never hardcode positions — Canvas handles auto-insert internally.
+- Any logic duplicated across clients must go into `packages/shared-types` or `packages/shared-layout`. Client code should only contain framework-specific glue (React hooks, CLI output formatting, etc.).
+
+### agents.json Documentation
+
+Significant directories contain `agents.json` files for progressive disclosure. When creating new modules, add an `agents.json`. When modifying architecture, update the relevant ones.
+
+### API Validation
+
+All API requests validated with Zod schemas in `apps/api-cf/src/domain/requests.ts`. Validation errors return 400 with structured details.
+
+## Frontend Specifics (apps/web)
+
+- **Styling**: Tailwind CSS v4, Framer Motion animations, Phosphor Icons (`weight="bold"` or `"duotone"`)
+- **Fonts**: Inter (body), Space Grotesk (headings), JetBrains Mono (mono)
+- **Design**: Modern minimalist — soft shadows, rounded corners (`rounded-xl`, `rounded-2xl`), glass morphism (`bg-white/30 backdrop-blur-xl`), red accent (`red-500`/`red-600` as brand)
+- **Component model**: Server components by default, `'use client'` only when needed
+- **Canvas**: ReactFlow for node graph, dnd-kit for drag-and-drop
+- **Path alias**: `@/*` maps to project root
+- **DB schema**: `apps/web/lib/db/app.schema.ts` (projects, API tokens), `apps/web/lib/db/better-auth.schema.ts` (users, sessions)
+
+## CLI (packages/cli)
+
+Installed as `lightpick` command. Connects to canvas via WebSocket (Loro CRDT sync), REST for project CRUD.
+
+```bash
+lightpick auth login              # Configure API token
+lightpick auth status             # Verify authentication
+lightpick projects list           # List projects
+lightpick canvas list --project <id>    # List canvas nodes
+lightpick canvas execute --project <id> --node <id>  # Trigger generation
+lightpick tasks wait --task-id <id>     # Poll task to completion
+```
+
+Config stored at `~/.lightpick/config.json`. Server URL via `LIGHTPICK_SERVER_URL` env var (defaults to `http://localhost:8788`).

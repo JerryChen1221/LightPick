@@ -1,0 +1,43 @@
+{
+  "name": "@lightpick/api-cf",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --port 8789 --inspector-port 9333 --persist-to ../../.wrangler/state",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.mts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.69",
+    "@ai-sdk/google": "^3.0.0",
+    "@ai-sdk/google-vertex": "^4.0.98",
+    "@ai-sdk/openai": "^3.0.48",
+    "@lightpick/shared-layout": "workspace:^",
+    "@lightpick/shared-types": "workspace:*",
+    "@cloudflare/ai-chat": "^0.2.5",
+    "@cloudflare/containers": "^0.2.0",
+    "@fal-ai/client": "^1.9.5",
+    "@google/generative-ai": "^0.24.0",
+    "agents": "^0.8.6",
+    "ai": "^6.0.0",
+    "better-auth": "^1.6.9",
+    "better-auth-cloudflare": "^0.2.9",
+    "consola": "^3.4.2",
+    "drizzle-orm": "^0.36.4",
+    "hono": "^4.7.10",
+    "jose": "^6.0.11",
+    "loro-crdt": "^1.10.3",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "~0.14.7",
+    "@cloudflare/workers-types": "^4.20250525.0",
+    "typescript": "^5.8.3",
+    "vitest": "~4.1.0",
+    "wrangler": "^4.18.0"
+  }
+}

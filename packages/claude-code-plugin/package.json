@@ -1,0 +1,14 @@
+{
+  "name": "@lightpick/claude-code-plugin",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for LightPick — AI video production",
+  "type": "module",
+  "main": "index.mjs",
+  "license": "Apache-2.0",
+  "files": [
+    "index.mjs",
+    "openclaw.plugin.json",
+    "commands",
+    "hooks"
+  ]
+}

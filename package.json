@@ -1,0 +1,54 @@
+{
+  "name": "lightpick",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered video production platform",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:log": "./scripts/dev-log.sh",
+    "logs": "./scripts/logs.sh",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "clean": "turbo run clean && rm -rf node_modules .turbo"
+  },
+  "keywords": [
+    "ai",
+    "video-production",
+    "cloudflare",
+    "react-router",
+    "langgraph"
+  ],
+  "author": "hrhrng <hrhrng@foxmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "prettier": "^3.0.0",
+    "turbo": "^2.0.0",
+    "wrangler": "^4"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.5",
+      "react-dom": "19.2.5",
+      "remotion": "4.0.370",
+      "@remotion/*": "4.0.370",
+      "@vitest/utils": "4.1.0",
+      "@vitest/runner": "4.1.0",
+      "@vitest/snapshot": "4.1.0",
+      "@vitest/expect": "4.1.0",
+      "@vitest/spy": "4.1.0",
+      "@vitest/pretty-format": "4.1.0",
+      "@vitest/mocker": "4.1.0",
+      "vitest": "4.1.0"
+    }
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.2.0",
+    "better-auth": "^1.4.6",
+    "better-auth-cloudflare": "^0.2.9",
+    "zod": "^4"
+  }
+}

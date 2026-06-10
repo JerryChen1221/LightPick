@@ -1,0 +1,37 @@
+{
+  "name": "@lightpick/cli",
+  "version": "0.1.0-beta.3",
+  "description": "LightPick CLI — manage projects and canvas from your terminal",
+  "bin": {
+    "lightpick": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "loro-crdt": "^1.10.3",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@lightpick/shared-layout": "workspace:^",
+    "@lightpick/shared-types": "workspace:*",
+    "@types/ws": "^8.5.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
