@@ -709,15 +709,84 @@ export const MODEL_CARDS: ModelCard[] = [
     },
   },
 
-  // ─── Video: Kling 2.1 (fal.ai) ──────────────────────────────
-  // Single card — provider auto-routes to /text-to-video or /image-to-video.
+  // ─── Video: Kling 3.0 Turbo (native API) ────────────────────
   {
-    id: 'kling-2.1',
-    name: 'Kling 2.1',
-    provider: 'fal.ai',
+    id: 'kling-3-turbo',
+    name: 'Kling 3.0 Turbo',
+    provider: 'Kling',
     kind: 'video',
     defaultAspectRatio: '16:9',
-    description: 'Kling 2.1 — fast, cinematic video generation, text or image input.',
+    description: 'Kling 3.0 Turbo — fast, stable quality, text + image input, 3~15s, 720P/1080P.',
+    parameters: [
+      {
+        id: 'duration',
+        label: 'Duration',
+        type: 'select',
+        options: [
+          { label: '5s', value: '5' },
+          { label: '10s', value: '10' },
+          { label: '15s', value: '15' },
+        ],
+        defaultValue: '5',
+      },
+      {
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
+      },
+    ],
+    defaultParams: {
+      duration: '5',
+      aspect_ratio: '16:9',
+    },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
+  },
+
+  // ─── Video: Kling 3.0 (native API) ─────────────────────────
+  {
+    id: 'kling-3',
+    name: 'Kling 3.0',
+    provider: 'Kling',
+    kind: 'video',
+    defaultAspectRatio: '16:9',
+    description: 'Kling 3.0 — synchronized audio+video, text + image + video input, 3~15s, up to 4K.',
+    parameters: [
+      {
+        id: 'duration',
+        label: 'Duration',
+        type: 'select',
+        options: [
+          { label: '5s', value: '5' },
+          { label: '10s', value: '10' },
+          { label: '15s', value: '15' },
+        ],
+        defaultValue: '5',
+      },
+      {
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
+      },
+    ],
+    defaultParams: {
+      duration: '5',
+      aspect_ratio: '16:9',
+    },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
+  },
+
+  // ─── Video: Kling O1 (native API) ──────────────────────────
+  {
+    id: 'kling-o1',
+    name: 'Kling O1',
+    provider: 'Kling',
+    kind: 'video',
+    defaultAspectRatio: '16:9',
+    description: 'Kling O1 — unified multimodal model, text + image + video input, 3~10s, 720P/1080P.',
     parameters: [
       {
         id: 'duration',
@@ -744,14 +813,14 @@ export const MODEL_CARDS: ModelCard[] = [
     input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
   },
 
-  // ─── Video: Kling 3 Pro (fal.ai) — first frame + optional end frame ────
+  // ─── Video: Kling 2.5 Turbo (native API) ───────────────────
   {
-    id: 'kling-3',
-    name: 'Kling 3 Pro',
-    provider: 'fal.ai',
+    id: 'kling-2.5-turbo',
+    name: 'Kling 2.5 Turbo',
+    provider: 'Kling',
     kind: 'video',
     defaultAspectRatio: '16:9',
-    description: 'Kling 3 Pro — first + optional end frame, with native audio.',
+    description: 'Kling 2.5 Turbo — fast generation, text + image input, 5s/10s, 720P/1080P.',
     parameters: [
       {
         id: 'duration',
@@ -764,17 +833,64 @@ export const MODEL_CARDS: ModelCard[] = [
         defaultValue: '5',
       },
       {
-        id: 'generate_audio',
-        label: 'Native audio',
-        type: 'boolean',
-        defaultValue: true,
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
       },
     ],
     defaultParams: {
       duration: '5',
-      generate_audio: true,
+      aspect_ratio: '16:9',
     },
-    input: { requiresPrompt: true, inputMode: { startEnd: {} } },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
+  },
+
+  // ─── Image: Kling Image 3.0 (native API) ──────────────────────
+  {
+    id: 'kling-image-3',
+    name: 'Kling Image 3.0',
+    provider: 'Kling',
+    kind: 'image',
+    defaultAspectRatio: '16:9',
+    description: 'Kling Image 3.0 — high consistency, free reference composition, 1K/2K resolution.',
+    parameters: [
+      {
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
+      },
+    ],
+    defaultParams: {
+      aspect_ratio: '16:9',
+    },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
+  },
+
+  // ─── Image: Kling Image O1 (native API) ──────────────────────
+  {
+    id: 'kling-image-o1',
+    name: 'Kling Image O1',
+    provider: 'Kling',
+    kind: 'image',
+    defaultAspectRatio: '16:9',
+    description: 'Kling Image O1 — high feature consistency, precise detail, 1K/2K resolution.',
+    parameters: [
+      {
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
+      },
+    ],
+    defaultParams: {
+      aspect_ratio: '16:9',
+    },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
   },
 
   // ─── Image: Recraft V4 Pro (fal.ai) ──────────────────────────

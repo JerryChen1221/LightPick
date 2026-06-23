@@ -5,6 +5,8 @@ import { veoProvider } from "./providers/veo";
 import { falVideoProvider } from "./providers/fal-video";
 import { googleImageProvider } from "./providers/google-image";
 import { falImageProvider } from "./providers/fal-image";
+import { klingImageProvider } from "./providers/kling-image";
+import { klingVideoProvider } from "./providers/kling-video";
 import { geminiTtsProvider } from "./providers/gemini-tts";
 import { videoRenderProvider } from "./providers/render";
 import { customActionProvider } from "./providers/custom-action";
@@ -13,14 +15,28 @@ import { googleTextProvider } from "./providers/google-text";
 import { understandProvider } from "./providers/understand";
 import { describeProvider } from "./providers/describe";
 
+function isKlingVideoModel(model?: string): boolean {
+  if (!model) return false;
+  return model.startsWith("kling-") && !model.startsWith("kling-image");
+}
+
+function isKlingImageModel(model?: string): boolean {
+  if (!model) return false;
+  return model.startsWith("kling-image");
+}
+
 export function resolveProvider(params: GenerationParams): GenerationProvider {
   switch (params.type) {
     case "video_gen": {
       const model = params.videoModel ?? params.modelName;
-      return isGoogleVideoModel(model) ? veoProvider : falVideoProvider;
+      if (isGoogleVideoModel(model)) return veoProvider;
+      if (isKlingVideoModel(model)) return klingVideoProvider;
+      return falVideoProvider;
     }
     case "image_gen": {
-      return isGoogleImageModel(params.modelName) ? googleImageProvider : falImageProvider;
+      if (isGoogleImageModel(params.modelName)) return googleImageProvider;
+      if (isKlingImageModel(params.modelName)) return klingImageProvider;
+      return falImageProvider;
     }
     case "audio_gen": {
       if (!isGoogleAudioModel(params.modelName ?? "gemini-3.1-flash-tts")) {
