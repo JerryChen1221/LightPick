@@ -153,7 +153,10 @@ group: GroupNode,
 };
 
 const defaultImageModel = MODEL_CARDS.find((card) => card.kind === 'image');
-const defaultVideoModel = MODEL_CARDS.find((card) => card.kind === 'video');
+const DEFAULT_VIDEO_MODEL_ID = 'joybuilder-kling-2.5-turbo';
+const defaultVideoModel =
+    MODEL_CARDS.find((card) => card.id === DEFAULT_VIDEO_MODEL_ID) ??
+    MODEL_CARDS.find((card) => card.kind === 'video');
 const defaultAudioModel = MODEL_CARDS.find((card) => card.kind === 'audio');
 const defaultTextModel = MODEL_CARDS.find((card) => card.kind === 'text');
 
@@ -546,6 +549,16 @@ export default function ProjectEditor({ project, initialPrompt, initialThreadId,
             return null;
         }
     }, [project.id]);
+
+    const handleCreateSessionFromChat = useCallback(async (initialMessage?: string): Promise<{ threadId: string; title: string } | null> => {
+        const result = await handleCreateSession(initialMessage);
+        if (result) {
+            upsertSession(result.threadId, result.title);
+            setChatInitialPrompt(initialMessage);
+            setThreadId(result.threadId);
+        }
+        return result;
+    }, [handleCreateSession, upsertSession]);
 
     const handleNewSession = useCallback(() => {
         setChatInitialPrompt(undefined);
@@ -1119,8 +1132,8 @@ export default function ProjectEditor({ project, initialPrompt, initialThreadId,
             modelParams: { ...(defaultImageModel?.defaultParams ?? {}) },
         };
         const videoModelDefaults = {
-            modelId: defaultVideoModel?.id ?? 'sora-2',
-            model: defaultVideoModel?.id ?? 'sora-2',
+            modelId: defaultVideoModel?.id ?? DEFAULT_VIDEO_MODEL_ID,
+            model: defaultVideoModel?.id ?? DEFAULT_VIDEO_MODEL_ID,
             modelParams: { ...(defaultVideoModel?.defaultParams ?? {}) },
         };
         const audioModelDefaults = {
@@ -1129,8 +1142,8 @@ export default function ProjectEditor({ project, initialPrompt, initialThreadId,
             modelParams: { ...(defaultAudioModel?.defaultParams ?? {}) },
         };
         const textModelDefaults = {
-            modelId: defaultTextModel?.id ?? 'gpt-5.4',
-            model: defaultTextModel?.id ?? 'gpt-5.4',
+            modelId: defaultTextModel?.id ?? 'gpt-5.5',
+            model: defaultTextModel?.id ?? 'gpt-5.5',
             modelParams: { ...(defaultTextModel?.defaultParams ?? {}) },
         };
 
@@ -1820,7 +1833,7 @@ export default function ProjectEditor({ project, initialPrompt, initialThreadId,
                     if (!rest.height) rest.height = 80;
                 } else if (type === 'video-gen') {
                     type = 'action-badge';
-                    data = { actionType: 'video-gen', modelId: defaultVideoModel?.id ?? 'sora-2', model: defaultVideoModel?.id ?? 'sora-2', modelParams: { ...(defaultVideoModel?.defaultParams ?? {}) }, ...data };
+                    data = { actionType: 'video-gen', modelId: defaultVideoModel?.id ?? DEFAULT_VIDEO_MODEL_ID, model: defaultVideoModel?.id ?? DEFAULT_VIDEO_MODEL_ID, modelParams: { ...(defaultVideoModel?.defaultParams ?? {}) }, ...data };
                     if (!rest.width) rest.width = 200;
                     if (!rest.height) rest.height = 80;
                 } else if (type === 'audio-gen') {
@@ -1830,7 +1843,7 @@ export default function ProjectEditor({ project, initialPrompt, initialThreadId,
                     if (!rest.height) rest.height = 80;
                 } else if (type === 'text-gen') {
                     type = 'action-badge';
-                    data = { actionType: 'text-gen', modelId: defaultTextModel?.id ?? 'gpt-5.4', model: defaultTextModel?.id ?? 'gpt-5.4', modelParams: { ...(defaultTextModel?.defaultParams ?? {}) }, ...data };
+                    data = { actionType: 'text-gen', modelId: defaultTextModel?.id ?? 'gpt-5.5', model: defaultTextModel?.id ?? 'gpt-5.5', modelParams: { ...(defaultTextModel?.defaultParams ?? {}) }, ...data };
                     if (!rest.width) rest.width = 200;
                     if (!rest.height) rest.height = 80;
                 }
@@ -2266,7 +2279,7 @@ export default function ProjectEditor({ project, initialPrompt, initialThreadId,
                                         onNewSession={handleNewSession}
                                         onSwitchSession={handleSwitchSession}
                                         onDeleteSession={handleDeleteSession}
-                                        onCreateSession={handleCreateSession}
+                                        onCreateSession={handleCreateSessionFromChat}
                                     />
                                 </div>
                             </div>

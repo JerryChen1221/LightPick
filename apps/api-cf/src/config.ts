@@ -12,6 +12,12 @@ export interface Env {
   CF_AIG_TOKEN: string;
   /** AI Gateway base URL for OpenAI, e.g. https://gateway.ai.cloudflare.com/v1/{account}/{gw}/openai */
   CF_AIG_OPENAI_URL: string;
+  /** JoyBuilder / JD Cloud AI API bearer token for OpenAI-compatible models and GPT-Image. */
+  JOYBUILDER_API_KEY?: string;
+  /** JoyBuilder OpenAI-compatible base URL, e.g. http://ai-api.jdcloud.com/v1 */
+  JOYBUILDER_BASE_URL?: string;
+  /** JoyBuilder ModelService base URL for Kling, e.g. https://modelservice.jdcloud.com */
+  JOYBUILDER_MODEL_SERVICE_URL?: string;
   /** AI provider: "openai" (default), "anthropic", or "google" */
   AI_PROVIDER?: string;
   /** Model override, e.g. "claude-sonnet-4-20250514", "gpt-5", or "gemini-2.5-flash" */

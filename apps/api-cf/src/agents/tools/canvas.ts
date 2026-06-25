@@ -199,7 +199,7 @@ export function createCanvasTools(
       node_type: z.enum(GENERATION_NODE_TYPES).describe("Generation node type: image_gen, video_gen, audio_gen, or text_gen"),
       label: z.string().describe("Display label"),
       prompt: z.string().describe("The generation prompt — detailed description of what to generate"),
-      model_name: z.string().optional().describe("Model ID from list_models (e.g. 'flux-2-pro')"),
+      model_name: z.string().optional().describe("Model ID from list_models. Use 'gpt-image-2' for image generation in JoyBuilder deployments."),
       position: z.object({ x: z.number(), y: z.number() }).optional().describe("Canvas coordinates"),
       parent_id: z.string().optional().describe("Parent group; defaults to current workspace"),
     }),
@@ -220,9 +220,17 @@ export function createCanvasTools(
               : node_type === NodeType.AudioGen
                 ? "audio"
                 : "text";
-        const modelCard = model_name
-          ? MODEL_CARDS.find(c => c.id === model_name)
-          : MODEL_CARDS.find(c => c.kind === kind);
+        const requestedModel = model_name ? MODEL_CARDS.find(c => c.id === model_name) : undefined;
+        const requestedUnavailable =
+          requestedModel?.kind === "image" &&
+          requestedModel.provider === "fal.ai" &&
+          !env.FAL_API_KEY;
+        const preferredDefaultModel = kind === "video"
+          ? MODEL_CARDS.find((c) => c.id === "joybuilder-kling-2.5-turbo" && isModelAvailable(c))
+          : undefined;
+        const modelCard = requestedModel && !requestedUnavailable
+          ? requestedModel
+          : preferredDefaultModel ?? MODEL_CARDS.find(c => c.kind === kind && isModelAvailable(c));
         const modelId = modelCard?.id || model_name || "";
 
         log.info("create_generation_node creating node", { nodeId, assetId, modelId, resolvedParent });
@@ -383,12 +391,19 @@ export function createCanvasTools(
         | "audio"
         | "text"
         | undefined;
-      const cards = normalizedKind
+      const cards = (normalizedKind
         ? MODEL_CARDS.filter((c) => c.kind === normalizedKind)
-        : MODEL_CARDS;
+        : MODEL_CARDS).filter(isModelAvailable);
       return cards;
     },
   });
+
+  function isModelAvailable(card: (typeof MODEL_CARDS)[number]): boolean {
+    if (card.kind === "image" && card.provider === "fal.ai" && !env.FAL_API_KEY) return false;
+    if (card.kind === "image" && card.provider === "Kling") return false;
+    if (card.provider === "Google" && !env.GOOGLE_API_KEY && !env.GOOGLE_CLIENT_EMAIL) return false;
+    return true;
+  }
 
   const understandAsset = tool({
     description:

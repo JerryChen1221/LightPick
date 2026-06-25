@@ -1,10 +1,16 @@
 GOOGLE_API_KEY=
 GOOGLE_AI_STUDIO_BASE_URL=
 CF_AIG_TOKEN=
+JOYBUILDER_API_KEY=
+# Optional: if unset, JoyBuilder OpenAI/GPT-Image calls fall back to KLING_ACCESS_KEY.
+JOYBUILDER_BASE_URL=http://ai-api.jdcloud.com/v1
+JOYBUILDER_MODEL_SERVICE_URL=https://modelservice.jdcloud.com
 FAL_API_KEY=
 FAL_GATEWAY_URL=
 R2_PUBLIC_URL=
 KLING_ACCESS_KEY=
+# JD Cloud ModelService Kling uses Bearer pk-* token in KLING_ACCESS_KEY.
+# KLING_SECRET_KEY is kept for compatibility with older native Kling config.
 KLING_SECRET_KEY=
 CF_AIG_OPENAI_URL=
 GOOGLE_CLIENT_EMAIL=

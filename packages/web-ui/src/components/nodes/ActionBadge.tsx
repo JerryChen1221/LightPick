@@ -31,9 +31,9 @@ const getBuiltInActionKind = (actionType: string): BuiltInActionKind => {
 
 const FALLBACK_MODEL_BY_KIND: Record<BuiltInActionKind, string> = {
     image: 'nano-banana-2',
-    video: 'sora-2',
+    video: 'joybuilder-kling-2.5-turbo',
     audio: 'gemini-3.1-flash-tts',
-    text: 'gpt-5.4',
+    text: 'gpt-5.5',
 };
 
 // Helper to extract meaningful label from prompt content

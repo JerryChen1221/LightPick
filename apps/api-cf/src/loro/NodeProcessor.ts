@@ -19,9 +19,12 @@ import { signAssetPath } from '../services/asset-signing';
 import { MODEL_CARDS, parsePromptParts, extractPromptText } from '@lightpick/shared-types';
 
 const defaultImageModel = MODEL_CARDS.find((card) => card.kind === 'image')?.id ?? 'nano-banana-2';
-const defaultVideoModel = MODEL_CARDS.find((card) => card.kind === 'video')?.id ?? 'sora-2';
+const defaultVideoModel =
+  MODEL_CARDS.find((card) => card.id === 'joybuilder-kling-2.5-turbo')?.id ??
+  MODEL_CARDS.find((card) => card.kind === 'video')?.id ??
+  'joybuilder-kling-2.5-turbo';
 const defaultAudioModel = MODEL_CARDS.find((card) => card.kind === 'audio')?.id ?? 'gemini-3.1-flash-tts';
-const defaultTextModel = MODEL_CARDS.find((card) => card.kind === 'text')?.id ?? 'gpt-5.4';
+const defaultTextModel = MODEL_CARDS.find((card) => card.kind === 'text')?.id ?? 'gpt-5.5';
 
 const getModelCard = (modelId?: string) => MODEL_CARDS.find((card) => card.id === modelId);
 

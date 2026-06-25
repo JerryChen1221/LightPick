@@ -3,6 +3,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
 import type { Env } from "./config";
+import { joyBuilderOpenAIConfig } from "./services/joybuilder";
 
 export type ProviderType = "openai" | "anthropic" | "google";
 
@@ -10,7 +11,7 @@ export type ProviderType = "openai" | "anthropic" | "google";
  * Create the AI model from environment config.
  *
  * Supports:
- * - `openai` (default): uses CF AI Gateway with automatic prefix caching (≥1024 token prefix)
+ * - `openai` (default): uses JoyBuilder's OpenAI-compatible gateway
  * - `anthropic`: uses @ai-sdk/anthropic with explicit cache_control breakpoints (90% savings)
  * - `google`: uses AI Studio / Gemini via @ai-sdk/google
  *
@@ -43,13 +44,10 @@ export function createModel(env: Env): { model: LanguageModel; provider: Provide
     };
   }
 
-  // Default: OpenAI via CF AI Gateway
-  const openai = createOpenAI({
-    apiKey: env.CF_AIG_TOKEN,
-    baseURL: env.CF_AIG_OPENAI_URL,
-  });
+  // Default: OpenAI-compatible chat via JoyBuilder.
+  const openai = createOpenAI(joyBuilderOpenAIConfig(env));
   return {
-    model: openai.chat(env.AI_MODEL || "gpt-5.4"),
+    model: openai.chat(env.AI_MODEL || "gpt-5.5"),
     provider: "openai",
   };
 }

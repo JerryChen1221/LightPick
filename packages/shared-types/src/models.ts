@@ -58,6 +58,15 @@ export const KLING_ASPECT_RATIOS = [
 ] as const;
 
 /**
+ * JoyBuilder GPT-Image sizes.
+ */
+export const GPT_IMAGE_SIZES = [
+  { label: '1:1', value: '1024x1024' },
+  { label: '2:3', value: '1024x1536' },
+  { label: '3:2', value: '1536x1024' },
+] as const;
+
+/**
  * Veo 3 aspect ratios (fal.ai)
  */
 export const VEO3_ASPECT_RATIOS = [
@@ -345,6 +354,64 @@ const GEMINI_TTS_PARAMETERS: ModelParameter[] = [
 ];
 
 export const MODEL_CARDS: ModelCard[] = [
+  // ─── Image: GPT-Image 2 (JoyBuilder) ────────────────────────
+  {
+    id: 'gpt-image-2',
+    name: 'GPT-Image 2',
+    provider: 'JoyBuilder',
+    kind: 'image',
+    defaultAspectRatio: '3:2',
+    aspectRatioParam: 'size',
+    description: 'JoyBuilder GPT-Image 2 — text-to-image with base64 image output.',
+    parameters: [
+      {
+        id: 'size',
+        label: 'Size',
+        type: 'select',
+        options: GPT_IMAGE_SIZES.map(s => ({ label: s.label, value: s.value })),
+        defaultValue: '1536x1024',
+      },
+      {
+        id: 'quality',
+        label: 'Quality',
+        type: 'select',
+        options: [
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+        ],
+        defaultValue: 'medium',
+      },
+      {
+        id: 'output_format',
+        label: 'Output Format',
+        type: 'select',
+        options: [
+          { label: 'PNG', value: 'PNG' },
+          { label: 'JPEG', value: 'JPEG' },
+        ],
+        defaultValue: 'PNG',
+      },
+      {
+        id: 'output_compression',
+        label: 'Compression',
+        type: 'slider',
+        min: 0,
+        max: 100,
+        step: 1,
+        defaultValue: 100,
+        description: 'JPEG compression level; PNG ignores this setting.',
+      },
+    ],
+    defaultParams: {
+      size: '1536x1024',
+      quality: 'medium',
+      output_format: 'PNG',
+      output_compression: 100,
+    },
+    input: { requiresPrompt: true, inputMode: {} },
+  },
+
   // ─── Image: Nano Banana 2 (fal.ai) ──────────────────────────
   {
     id: 'nano-banana-2',
@@ -709,6 +776,40 @@ export const MODEL_CARDS: ModelCard[] = [
     },
   },
 
+  // ─── Video: JoyBuilder Kling 2.5 Turbo ─────────────────────
+  {
+    id: 'joybuilder-kling-2.5-turbo',
+    name: 'JoyBuilder Kling 2.5 Turbo',
+    provider: 'JoyBuilder',
+    kind: 'video',
+    defaultAspectRatio: '16:9',
+    description: 'JoyBuilder Kling 2.5 Turbo — text-to-video or image-to-video, 5s/10s.',
+    parameters: [
+      {
+        id: 'duration',
+        label: 'Duration',
+        type: 'select',
+        options: [
+          { label: '5s', value: '5' },
+          { label: '10s', value: '10' },
+        ],
+        defaultValue: '5',
+      },
+      {
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
+      },
+    ],
+    defaultParams: {
+      duration: '5',
+      aspect_ratio: '16:9',
+    },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
+  },
+
   // ─── Video: Kling 3.0 Turbo (native API) ────────────────────
   {
     id: 'kling-3-turbo',
@@ -760,7 +861,6 @@ export const MODEL_CARDS: ModelCard[] = [
         options: [
           { label: '5s', value: '5' },
           { label: '10s', value: '10' },
-          { label: '15s', value: '15' },
         ],
         defaultValue: '5',
       },
@@ -1293,9 +1393,9 @@ export const MODEL_CARDS: ModelCard[] = [
 
   // ─── Text ────────────────────────────────────────────────────
   {
-    id: 'gpt-5.4',
-    name: 'GPT-5.4 Text',
-    provider: 'OpenAI',
+    id: 'gpt-5.5',
+    name: 'GPT-5.5 Text',
+    provider: 'JoyBuilder',
     kind: 'text',
     defaultAspectRatio: '1:1',
     description: 'General-purpose text generation. Accepts image context alongside the prompt (vision).',

@@ -58,7 +58,7 @@ export type AudioGenParams = z.infer<typeof AudioGenParamsSchema>;
 // === Text Generation Params ===
 export const TextGenParamsSchema = z.object({
   prompt: z.string(),
-  model: z.string().default('gpt-5.4'),
+  model: z.string().default('gpt-5.5'),
   model_params: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 export type TextGenParams = z.infer<typeof TextGenParamsSchema>;

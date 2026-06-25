@@ -1,5 +1,5 @@
 /**
- * Text generation via OpenAI-compatible gateway (CF AI Gateway).
+ * Text generation via JoyBuilder's OpenAI-compatible gateway.
  * Accepts inline image / audio refs alongside the prompt — vision-capable
  * GPT models read them; non-vision models will reject and surface an error.
  * No asset output — result lands on node.data.content.
@@ -7,6 +7,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { log } from "../../logger";
+import { joyBuilderOpenAIConfig } from "../../services/joybuilder";
 import type { GenerationProvider } from "../provider";
 import { buildMultimodalUserMessage } from "../multimodal";
 
@@ -20,11 +21,8 @@ export const textGenProvider: GenerationProvider = {
       "generate-text",
       { retries: { limit: 2, delay: "5 seconds", backoff: "exponential" }, timeout: "3 minutes" },
       async () => {
-        const openai = createOpenAI({
-          apiKey: env.CF_AIG_TOKEN,
-          baseURL: env.CF_AIG_OPENAI_URL,
-        });
-        const modelName = params.modelName || env.AI_MODEL || "gpt-5.4";
+        const openai = createOpenAI(joyBuilderOpenAIConfig(env));
+        const modelName = params.modelName || env.AI_MODEL || "gpt-5.5";
         const systemPrompt =
           typeof params.modelParams?.system_prompt === "string"
             ? params.modelParams.system_prompt.trim()
