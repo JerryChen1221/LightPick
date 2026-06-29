@@ -32,7 +32,12 @@ function buildGenNodeData(
     outputKind: 'image' | 'video' | 'audio' | 'text',
     sourceKind?: Modality,
 ): Record<string, unknown> {
-    const card = pickDefaultModel({ outputKind, sourceKind });
+    // Text generation is prompt-first in local/JoyBuilder deployments. Picking
+    // a video-capable Gemini default from a video source makes the node look
+    // valid but fail when Vertex credentials are not configured.
+    const card = actionType === 'text-gen'
+        ? pickDefaultModel({ outputKind })
+        : pickDefaultModel({ outputKind, sourceKind });
     const modelId = card?.id ?? '';
     const labelByAction = {
         'image-gen': 'Image Prompt',

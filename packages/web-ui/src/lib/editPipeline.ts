@@ -58,9 +58,8 @@ export async function applyImageEdit(input: {
  * Apply a video screenshot — pull a frame at `frameTimeSec` from the source
  * video element via canvas.drawImage, upload as a new image asset.
  *
- * Crop mode (time-range trimming) is not implemented client-side: it would
- * require ffmpeg.wasm (~25MB) for a quality-preserving re-encode. Caller
- * should route crop requests through a future server endpoint instead.
+ * Crop mode (time-range trimming) is routed through `applyVideoCrop` so the
+ * server-side render service can run ffmpeg without shipping ffmpeg.wasm.
  */
 export async function applyVideoScreenshot(input: {
   projectId: string;
@@ -77,6 +76,32 @@ export async function applyVideoScreenshot(input: {
     blob,
     params: input.params,
   });
+}
+
+/**
+ * Apply a video time-range crop through the server-side render service.
+ * The browser only sends params; api-cf signs the source, asks render-server
+ * to ffmpeg-trim it, then creates a new video asset row.
+ */
+export async function applyVideoCrop(input: {
+  projectId: string;
+  sourceAssetId: string;
+  params: Extract<VideoClipParams, { mode: 'crop' }>;
+}): Promise<EditApplyResult> {
+  const res = await fetch('/api/v1/edits/video-crop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: input.projectId,
+      sourceAssetId: input.sourceAssetId,
+      params: input.params,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Video crop failed (${res.status}): ${text}`);
+  }
+  return (await res.json()) as EditApplyResult;
 }
 
 // ─── Internal: client-side renderers ────────────────────────

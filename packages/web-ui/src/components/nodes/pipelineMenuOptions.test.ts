@@ -28,9 +28,18 @@ describe("PIPELINE_MENU_OPTIONS", () => {
         expect(option?.getNodeData()).toMatchObject({
             label: "Text Prompt",
             actionType: "text-gen",
-            modelId: "gpt-5.4",
-            model: "gpt-5.4",
+            modelId: "gpt-5.5",
+            model: "gpt-5.5",
             content: "# Prompt\nEnter your prompt here...",
+        });
+    });
+
+    it("keeps text generation on the prompt-first JoyBuilder default for video sources", () => {
+        const option = PIPELINE_MENU_OPTIONS.find((item) => item.id === "text-gen");
+
+        expect(option?.getNodeData("video" as any)).toMatchObject({
+            modelId: "gpt-5.5",
+            model: "gpt-5.5",
         });
     });
 

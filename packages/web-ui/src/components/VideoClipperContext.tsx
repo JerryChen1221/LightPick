@@ -24,13 +24,13 @@
  * the visible <video>.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Edge, Node } from '@xyflow/react';
 import { useOptionalLoroSyncContext } from './LoroSyncContext';
 import { useSignedUrl } from '@lightpick/web-ui/lib/hooks/useSignedUrl';
 import { generateSemanticId } from '@lightpick/web-ui/lib/utils/semanticId';
 import { autoInsertNode } from '@lightpick/web-ui/lib/layout';
-import { applyVideoScreenshot } from '@lightpick/web-ui/lib/editPipeline';
+import { applyVideoCrop, applyVideoScreenshot } from '@lightpick/web-ui/lib/editPipeline';
 import type { VideoClipParams } from '@lightpick/shared-types';
 
 interface OpenVideoClipperInput {
@@ -173,22 +173,25 @@ function VideoClipperPanel({
             if (loroSync?.connected) {
                 loroSync.updateNode(input.editorNodeId, { data: { editParams: params } });
             }
-            if (params.mode === 'crop') {
-                throw new Error(
-                    'Video crop (time-range trimming) is not implemented yet. Use Screenshot mode for now.',
-                );
-            }
-            const result = await applyVideoScreenshot({
-                projectId: input.projectId,
-                sourceAssetId: input.sourceAssetId,
-                sourceR2Key: input.sourceR2Key,
-                params,
-            });
-            await spawnCompletedImageDownstream({
+            const result = params.mode === 'crop'
+                ? await applyVideoCrop({
+                    projectId: input.projectId,
+                    sourceAssetId: input.sourceAssetId,
+                    params,
+                })
+                : await applyVideoScreenshot({
+                    projectId: input.projectId,
+                    sourceAssetId: input.sourceAssetId,
+                    sourceR2Key: input.sourceR2Key,
+                    params,
+                });
+            await spawnCompletedAssetDownstream({
                 editorNodeId: input.editorNodeId,
                 parentId: input.parentId,
                 projectId: input.projectId,
                 assetId: result.assetId,
+                kind: params.mode === 'crop' ? 'video' : 'image',
+                label: params.mode === 'crop' ? 'Video Clip' : 'Screenshot',
                 nodes: input.nodes,
                 edges: input.edges,
                 loroSync,
@@ -272,7 +275,7 @@ function VideoClipperPanel({
                                 Length {formatTime(Math.max(0, endSec - startSec))}
                             </div>
                             <div className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
-                                Crop mode requires server-side trimming (not yet wired). Apply will fail.
+                                Crop creates a new trimmed video asset.
                             </div>
                         </section>
                     )}
@@ -655,13 +658,15 @@ interface SpawnInput {
     parentId?: string;
     projectId: string;
     assetId: string;
+    kind: 'image' | 'video';
+    label: string;
     nodes: Node[];
     edges: Edge[];
     loroSync: ReturnType<typeof useOptionalLoroSyncContext>;
 }
 
-async function spawnCompletedImageDownstream({
-    editorNodeId, parentId, projectId, assetId, nodes, edges, loroSync,
+async function spawnCompletedAssetDownstream({
+    editorNodeId, parentId, projectId, assetId, kind, label, nodes, edges, loroSync,
 }: SpawnInput): Promise<void> {
     if (!loroSync?.connected) return;
 
@@ -676,19 +681,19 @@ async function spawnCompletedImageDownstream({
     };
     const tempNode: Node = {
         id: newNodeId,
-        type: 'image',
+        type: kind,
         position: { x: 0, y: 0 },
-        data: { label: 'Screenshot', status: 'completed', assetId },
+        data: { label, status: 'completed', assetId },
         parentId: parentId ?? editorNode?.parentId,
     };
     const layout = autoInsertNode(newNodeId, [...nodes, tempNode], [...edges, tempEdge]);
 
     const finalNode = {
         id: newNodeId,
-        type: 'image',
+        type: kind,
         position: layout.position,
         parentId: parentId ?? editorNode?.parentId,
-        data: { label: 'Screenshot', status: 'completed', assetId },
+        data: { label, status: 'completed', assetId },
     };
     loroSync.addNode(newNodeId, finalNode);
 
