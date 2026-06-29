@@ -182,6 +182,8 @@ export interface JoyBuilderKlingVideoParams {
   mode?: string;
   duration?: string;
   aspectRatio?: string;
+  resolution?: string;
+  sound?: string | boolean;
   imageUrl?: string;
   endImageUrl?: string;
   callbackUrl?: string;
@@ -203,16 +205,39 @@ function hasJoyBuilderError(error: unknown): boolean {
   return (code !== undefined && code !== 0) || !!type || !!message || !!cause;
 }
 
-function normalizeKlingDuration(duration?: string): 5 | 10 {
-  return duration === "10" ? 10 : 5;
+function normalizeKlingDuration(duration?: string): number {
+  const parsed = Number(duration);
+  if (!Number.isFinite(parsed)) return 5;
+  return Math.max(3, Math.min(15, Math.round(parsed)));
 }
 
-function normalizeKlingMode(mode?: string): "std" | "pro" {
-  return mode === "pro" ? "pro" : "std";
+function normalizeKlingMode(mode?: string, resolution?: string): "std" | "pro" | "4k" {
+  if (mode === "std" || mode === "pro" || mode === "4k") return mode;
+  const upper = resolution?.toUpperCase();
+  if (upper === "4K") return "4k";
+  if (upper === "1080P") return "pro";
+  return "std";
 }
 
 function normalizeKlingAspectRatio(aspectRatio?: string): "16:9" | "9:16" | "1:1" {
   return aspectRatio === "9:16" || aspectRatio === "1:1" ? aspectRatio : "16:9";
+}
+
+function normalizeKlingResolution(resolution?: string): "720P" | "1080P" | "4K" | undefined {
+  if (!resolution) return undefined;
+  const upper = resolution.toUpperCase();
+  if (upper === "720P" || upper === "1080P" || upper === "4K") return upper;
+  return undefined;
+}
+
+function normalizeKlingSound(sound?: string | boolean): "on" | "off" | undefined {
+  if (sound === true) return "on";
+  if (sound === false) return "off";
+  if (typeof sound !== "string") return undefined;
+  const normalized = sound.trim().toLowerCase();
+  if (normalized === "on" || normalized === "true") return "on";
+  if (normalized === "off" || normalized === "false") return "off";
+  return undefined;
 }
 
 function videoContent(prompt?: string, negativePrompt?: string): JoyBuilderVideoContent[] {
@@ -304,6 +329,9 @@ export async function generateJoyBuilderKlingVideo(
   params: JoyBuilderKlingVideoParams,
 ): Promise<JoyBuilderKlingVideoResult> {
   const duration = normalizeKlingDuration(params.duration);
+  const resolution = normalizeKlingResolution(params.resolution);
+  const mode = normalizeKlingMode(params.mode, resolution);
+  const sound = normalizeKlingSound(params.sound);
   const content = videoContent(params.prompt, params.negativePrompt);
 
   if (params.imageUrl) {
@@ -325,8 +353,9 @@ export async function generateJoyBuilderKlingVideo(
     model: params.modelName ?? DEFAULT_JOYBUILDER_KLING_MODEL,
     content,
     parameters: {
-      mode: normalizeKlingMode(params.mode),
+      mode,
       duration,
+      ...(sound ? { sound } : {}),
       ...(!params.imageUrl ? { aspect_ratio: normalizeKlingAspectRatio(params.aspectRatio) } : {}),
     },
   };

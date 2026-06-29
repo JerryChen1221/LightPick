@@ -10,10 +10,19 @@ async function r2ToPublicUrl(bucket: R2Bucket, key: string, publicBase?: string)
 
 function mapJoyBuilderKlingModel(model?: string): string {
   switch (model) {
+    case "joybuilder-kling-v3":
+      return "kling-v3";
     case "joybuilder-kling-2.5-turbo":
     default:
       return "Kling-V2-5-Turbo";
   }
+}
+
+function joyBuilderKlingSound(model: string | undefined, sound: unknown): string | undefined {
+  if (sound === true) return "on";
+  if (sound === false) return "off";
+  if (typeof sound === "string" && (sound === "on" || sound === "off")) return sound;
+  return model === "joybuilder-kling-v3" ? "on" : undefined;
 }
 
 export const joyBuilderVideoProvider: GenerationProvider = {
@@ -46,10 +55,12 @@ export const joyBuilderVideoProvider: GenerationProvider = {
 
         const result = await generateJoyBuilderKlingVideo(env, {
           prompt: params.prompt,
+          negativePrompt: typeof params.modelParams?.negative_prompt === "string" ? params.modelParams.negative_prompt : undefined,
           modelName: mapJoyBuilderKlingModel(model),
-          mode: "std",
           duration: params.duration ? String(params.duration) : "5",
           aspectRatio: params.aspectRatio,
+          resolution: typeof params.resolution === "string" ? params.resolution : undefined,
+          sound: joyBuilderKlingSound(model, params.modelParams?.sound),
           imageUrl,
           endImageUrl,
         });

@@ -49,6 +49,7 @@ export interface GenerationParams {
   // ─── Other generation params ──────────────────────────────────────
   duration?: number;
   cfgScale?: number;
+  resolution?: string;
   /** Deprecated alias kept for wire-compat; readers should fall back to modelName. */
   videoModel?: string;
 

@@ -804,6 +804,7 @@ async function submitGenTask(
       endFrameR2Key: params.endFrameR2Key,
       duration: params.duration,
       cfgScale: params.cfgScale,
+      resolution: params.resolution,
       videoModel: params.model,
       sources: params.sources,
     };

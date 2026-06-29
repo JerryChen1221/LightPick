@@ -58,6 +58,15 @@ export const KLING_ASPECT_RATIOS = [
 ] as const;
 
 /**
+ * JoyBuilder Kling resolutions.
+ */
+export const JOYBUILDER_KLING_RESOLUTIONS = [
+  { label: '720P', value: '720P' },
+  { label: '1080P', value: '1080P' },
+  { label: '4K', value: '4K' },
+] as const;
+
+/**
  * JoyBuilder GPT-Image sizes.
  */
 export const GPT_IMAGE_SIZES = [
@@ -806,6 +815,55 @@ export const MODEL_CARDS: ModelCard[] = [
     defaultParams: {
       duration: '5',
       aspect_ratio: '16:9',
+    },
+    input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
+  },
+
+  // ─── Video: JoyBuilder Kling-V3 ─────────────────────────────
+  {
+    id: 'joybuilder-kling-v3',
+    name: 'JoyBuilder Kling-V3',
+    provider: 'JoyBuilder',
+    kind: 'video',
+    defaultAspectRatio: '16:9',
+    description: 'JoyBuilder Kling-V3 — text-to-video or image-to-video, 3~15s, 720P/1080P/4K.',
+    parameters: [
+      {
+        id: 'duration',
+        label: 'Duration',
+        type: 'slider',
+        min: 3,
+        max: 15,
+        step: 1,
+        defaultValue: 5,
+        description: 'Generation duration in seconds.',
+      },
+      {
+        id: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'select',
+        options: KLING_ASPECT_RATIOS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '16:9',
+      },
+      {
+        id: 'resolution',
+        label: 'Resolution',
+        type: 'select',
+        options: JOYBUILDER_KLING_RESOLUTIONS.map(r => ({ label: r.label, value: r.value })),
+        defaultValue: '1080P',
+      },
+      {
+        id: 'sound',
+        label: 'Native audio',
+        type: 'boolean',
+        defaultValue: true,
+      },
+    ],
+    defaultParams: {
+      duration: 5,
+      aspect_ratio: '16:9',
+      resolution: '1080P',
+      sound: true,
     },
     input: { requiresPrompt: true, inputMode: { images: { max: 1 } } },
   },
