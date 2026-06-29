@@ -2,6 +2,7 @@ const DEFAULT_JOYBUILDER_BASE_URL = "http://ai-api.jdcloud.com/v1";
 const DEFAULT_JOYBUILDER_MODEL_SERVICE_URL = "https://modelservice.jdcloud.com";
 const DEFAULT_GPT_IMAGE_MODEL = "gpt-image-2";
 const DEFAULT_JOYBUILDER_KLING_MODEL = "Kling-V2-5-Turbo";
+const DEFAULT_JOYBUILDER_TTS_MODEL = "Doubao-TTS";
 
 export interface JoyBuilderEnv {
   JOYBUILDER_API_KEY?: string;
@@ -89,6 +90,39 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
+function writeAscii(out: Uint8Array, offset: number, value: string): void {
+  for (let i = 0; i < value.length; i += 1) out[offset + i] = value.charCodeAt(i);
+}
+
+function pcm16ToWav(pcm: Uint8Array, sampleRate = 24_000, channels = 1): Uint8Array {
+  const bitsPerSample = 16;
+  const blockAlign = (channels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const out = new Uint8Array(44 + pcm.length);
+  const view = new DataView(out.buffer);
+
+  writeAscii(out, 0, "RIFF");
+  view.setUint32(4, 36 + pcm.length, true);
+  writeAscii(out, 8, "WAVE");
+  writeAscii(out, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeAscii(out, 36, "data");
+  view.setUint32(40, pcm.length, true);
+  out.set(pcm, 44);
+  return out;
+}
+
+function hasAudioContainerHeader(data: Uint8Array): boolean {
+  const header = new TextDecoder().decode(data.slice(0, 4));
+  return header === "RIFF" || header === "OggS" || header === "ID3" || (data[0] === 0xff && (data[1] & 0xe0) === 0xe0);
+}
+
 export async function generateGptImage(
   env: JoyBuilderEnv,
   params: GptImageGenerateParams,
@@ -134,6 +168,250 @@ export async function generateGptImage(
     mediaType: outputFormat === "JPEG" ? "image/jpeg" : "image/png",
     usage: (body as GptImageResponse).usage,
   };
+}
+
+// ── JoyBuilder TTS ─────────────────────────────────────────────
+
+export const JOYBUILDER_TTS_MODELS = new Set([
+  "joybuilder-doubao-tts",
+  "joybuilder-gemini-2.5-pro-tts",
+  "Doubao-TTS",
+  "Gemini-2.5-Pro-TTS",
+]);
+
+const JOYBUILDER_TTS_MODEL_MAP: Record<string, string> = {
+  "joybuilder-doubao-tts": "Doubao-TTS",
+  "joybuilder-gemini-2.5-pro-tts": "Gemini-2.5-Pro-TTS",
+};
+
+const JOYBUILDER_TTS_AUDIO_KEYS = [
+  "voice_type",
+  "emotion",
+  "enable_emotion",
+  "emotion_scale",
+  "encoding",
+  "speed_ratio",
+  "rate",
+  "bitrate",
+  "explicit_language",
+  "context_language",
+  "loudness_ratio",
+] as const;
+
+const JOYBUILDER_TTS_REQUEST_KEYS = [
+  "text_type",
+  "silence_duration",
+  "with_timestamp",
+  "enable_trailing_silence_audio",
+  "extra_param",
+] as const;
+
+export interface JoyBuilderTtsParams {
+  prompt: string;
+  modelName?: string;
+  modelParams?: Record<string, unknown>;
+}
+
+export interface JoyBuilderTtsResult {
+  data: Uint8Array;
+  mediaType: string;
+  model: string;
+}
+
+interface JoyBuilderTtsResponse {
+  reqid?: string;
+  code?: number;
+  message?: string;
+  sequence?: number;
+  data?: string;
+  addition?: {
+    duration?: string;
+  };
+}
+
+export function isJoyBuilderTtsModel(modelName: string | undefined): boolean {
+  return !!modelName && JOYBUILDER_TTS_MODELS.has(modelName);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function compactRecord<T extends Record<string, unknown>>(record: T): Partial<T> {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined && value !== "")) as Partial<T>;
+}
+
+function joyBuilderTtsProviderModel(modelName?: string): string {
+  if (!modelName) return DEFAULT_JOYBUILDER_TTS_MODEL;
+  return JOYBUILDER_TTS_MODEL_MAP[modelName] ?? modelName;
+}
+
+function joyBuilderTtsPath(modelName: string): string {
+  return /gemini|doubao-tts/i.test(modelName) ? "/tts/base64" : "/tts/byteStream";
+}
+
+function mediaTypeFromTtsEncoding(encoding: unknown): string {
+  switch (String(encoding ?? "mp3").toLowerCase()) {
+    case "wav":
+      return "audio/wav";
+    case "pcm":
+      return "audio/L16";
+    case "ogg_opus":
+      return "audio/ogg";
+    case "mp3":
+    default:
+      return "audio/mpeg";
+  }
+}
+
+function buildJoyBuilderTtsParams(
+  prompt: string,
+  modelName: string,
+  modelParams: Record<string, unknown> | undefined,
+  reqid: string,
+) {
+  const source = modelParams ?? {};
+  const nestedParams = isRecord(source.params) ? source.params : {};
+  const nestedAudio = isRecord(nestedParams.audio) ? nestedParams.audio : {};
+  const nestedRequest = isRecord(nestedParams.request) ? nestedParams.request : {};
+  const nestedUser = isRecord(nestedParams.user) ? nestedParams.user : {};
+
+  const audio: Record<string, unknown> = {
+    ...nestedAudio,
+    encoding: source.encoding ?? nestedAudio.encoding ?? "mp3",
+    speed_ratio: source.speed_ratio ?? nestedAudio.speed_ratio ?? 1,
+  };
+  for (const key of JOYBUILDER_TTS_AUDIO_KEYS) {
+    if (source[key] !== undefined) audio[key] = source[key];
+  }
+
+  const request: Record<string, unknown> = {
+    ...nestedRequest,
+    reqid: source.reqid ?? nestedRequest.reqid ?? reqid,
+    text: prompt,
+    text_type: source.text_type ?? nestedRequest.text_type ?? "plain",
+    operation: source.operation ?? nestedRequest.operation ?? "query",
+  };
+  for (const key of JOYBUILDER_TTS_REQUEST_KEYS) {
+    if (source[key] !== undefined) request[key] = source[key];
+  }
+
+  const params = compactRecord({
+    ...nestedParams,
+    ...(isRecord(nestedParams.app) ? { app: nestedParams.app } : {}),
+    user: compactRecord({
+      ...nestedUser,
+      uid: source.uid ?? nestedUser.uid ?? "lightpick",
+    }),
+    audio: compactRecord(audio),
+    request: compactRecord(request),
+  });
+
+  if (/gemini/i.test(modelName) && !params.voice_config && !params.multi_speaker_voice_config) {
+    params.voice_config = isRecord(source.voice_config)
+      ? source.voice_config
+      : {
+          prebuilt_voice_config: {
+            voice_name: typeof source.voice_name === "string" && source.voice_name.trim() ? source.voice_name.trim() : "Kore",
+          },
+        };
+  }
+
+  return params;
+}
+
+function collectTtsChunks(value: unknown, chunks: string[] = []): string[] {
+  if (!isRecord(value)) return chunks;
+  const code = typeof value.code === "number" ? value.code : 0;
+  if (code !== 0 && code !== 3000) {
+    throw new Error(`JoyBuilder TTS returned error: ${value.message ?? JSON.stringify(value)}`);
+  }
+  if (typeof value.data === "string" && value.data) chunks.push(value.data);
+  for (const nested of Object.values(value)) {
+    if (isRecord(nested)) collectTtsChunks(nested, chunks);
+    else if (Array.isArray(nested)) nested.forEach((item) => collectTtsChunks(item, chunks));
+  }
+  return chunks;
+}
+
+function parseJoyBuilderTtsText(text: string): unknown[] {
+  try {
+    return [JSON.parse(text)];
+  } catch {
+    const values: unknown[] = [];
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim().replace(/^data:\s*/, "");
+      if (!line || line === "[DONE]") continue;
+      try {
+        values.push(JSON.parse(line));
+      } catch {
+        // Ignore keepalive / non-JSON streaming delimiters.
+      }
+    }
+    return values;
+  }
+}
+
+export async function generateJoyBuilderTts(
+  env: JoyBuilderEnv,
+  params: JoyBuilderTtsParams,
+): Promise<JoyBuilderTtsResult> {
+  const prompt = params.prompt.trim();
+  if (!prompt) throw new Error("Prompt is required for JoyBuilder TTS generation.");
+  if (new TextEncoder().encode(prompt).length > 1024) {
+    throw new Error("JoyBuilder TTS prompt exceeds the 1024-byte UTF-8 limit.");
+  }
+
+  const { baseURL } = joyBuilderOpenAIConfig(env);
+  const model = joyBuilderTtsProviderModel(params.modelName);
+  const reqid = `lightpick-${crypto.randomUUID()}`;
+  const requestParams = buildJoyBuilderTtsParams(prompt, model, params.modelParams, reqid);
+  const encoding = isRecord(requestParams.audio) ? requestParams.audio.encoding : "mp3";
+
+  const resp = await fetch(`${baseURL}${joyBuilderTtsPath(model)}`, {
+    method: "POST",
+    headers: {
+      Authorization: joyBuilderBearer(env),
+      "Content-Type": "application/json",
+      Accept: "*/*",
+      "Trace-Id": reqid,
+    },
+    body: JSON.stringify({
+      model,
+      text: prompt,
+      params: requestParams,
+      stream: false,
+    }),
+  });
+
+  const contentType = resp.headers.get("content-type") ?? "";
+  if (resp.ok && contentType.startsWith("audio/")) {
+    return {
+      data: new Uint8Array(await resp.arrayBuffer()),
+      mediaType: contentType.split(";")[0] || mediaTypeFromTtsEncoding(encoding),
+      model,
+    };
+  }
+
+  const text = await resp.text();
+  const values = parseJoyBuilderTtsText(text);
+  if (!resp.ok) {
+    throw new Error(`JoyBuilder TTS error ${resp.status}: ${text || resp.statusText}`);
+  }
+
+  const chunks = values.flatMap((value) => collectTtsChunks(value as JoyBuilderTtsResponse));
+  if (chunks.length === 0) {
+    throw new Error(`JoyBuilder TTS response missing audio data: ${text}`);
+  }
+
+  let data = decodeBase64(chunks.join(""));
+  let mediaType = mediaTypeFromTtsEncoding(encoding);
+  if (/gemini/i.test(model) && !hasAudioContainerHeader(data)) {
+    data = pcm16ToWav(data);
+    mediaType = "audio/wav";
+  }
+
+  return { data, mediaType, model };
 }
 
 // ── JoyBuilder Kling Video ─────────────────────────────────────

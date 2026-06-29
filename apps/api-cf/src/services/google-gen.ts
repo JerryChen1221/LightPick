@@ -56,8 +56,8 @@ export const GOOGLE_AUDIO_MODELS = new Set([
 
 const GOOGLE_AUDIO_MODEL_MAP: Record<string, string> = {
   "gemini-3.1-flash-tts": "gemini-3.1-flash-tts-preview",
-  "gemini-2.5-flash-tts": "gemini-2.5-flash-tts",
-  "gemini-2.5-pro-tts": "gemini-2.5-pro-tts",
+  "gemini-2.5-flash-tts": "gemini-2.5-flash-preview-tts",
+  "gemini-2.5-pro-tts": "gemini-2.5-pro-preview-tts",
 };
 
 const GOOGLE_AUDIO_PROVIDER_MODELS = new Set(Object.values(GOOGLE_AUDIO_MODEL_MAP));

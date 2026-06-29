@@ -74,4 +74,26 @@ describe("Google audio generation", () => {
       },
     });
   });
+
+  it("maps Gemini 2.5 Pro TTS to the preview API model id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ inlineData: { data: base64(new Uint8Array([1, 2])) } }] } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateGoogleAudio("test-key", {
+      prompt: "Narrate this line.",
+      modelName: "gemini-2.5-pro-tts",
+      baseUrl: "https://example.test",
+    });
+
+    expect(result.model).toBe("gemini-2.5-pro-preview-tts");
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://example.test/v1beta/models/gemini-2.5-pro-preview-tts:generateContent");
+  });
 });
