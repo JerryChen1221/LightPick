@@ -353,6 +353,82 @@ const GEMINI_TTS_PARAMETERS: ModelParameter[] = [
   },
 ];
 
+const JOYBUILDER_TTS_PARAMETERS: ModelParameter[] = [
+  {
+    id: 'voice_type',
+    label: 'Voice Type',
+    type: 'text',
+    required: false,
+    placeholder: 'zh_male_M392_conversation_wvae_bigtts',
+    defaultValue: 'zh_male_M392_conversation_wvae_bigtts',
+    description: 'JoyBuilder / Doubao voice type.',
+  },
+  {
+    id: 'encoding',
+    label: 'Encoding',
+    type: 'select',
+    required: false,
+    options: [
+      { label: 'MP3', value: 'mp3' },
+      { label: 'WAV', value: 'wav' },
+      { label: 'PCM', value: 'pcm' },
+      { label: 'OGG Opus', value: 'ogg_opus' },
+    ],
+    defaultValue: 'mp3',
+  },
+  {
+    id: 'speed_ratio',
+    label: 'Speed',
+    type: 'slider',
+    required: false,
+    min: 0.8,
+    max: 2,
+    step: 0.1,
+    defaultValue: 1,
+    description: 'Speech speed multiplier.',
+  },
+  {
+    id: 'rate',
+    label: 'Sample Rate',
+    type: 'select',
+    required: false,
+    options: [
+      { label: '16 kHz', value: 16000 },
+      { label: '24 kHz', value: 24000 },
+      { label: '48 kHz', value: 48000 },
+    ],
+    defaultValue: 24000,
+  },
+  {
+    id: 'explicit_language',
+    label: 'Language',
+    type: 'select',
+    required: false,
+    options: [
+      { label: 'Crosslingual', value: 'crosslingual' },
+      { label: 'Chinese', value: 'zh' },
+      { label: 'English', value: 'en' },
+      { label: 'Japanese', value: 'ja' },
+    ],
+    defaultValue: 'crosslingual',
+  },
+];
+
+const JOYBUILDER_GEMINI_TTS_PARAMETERS: ModelParameter[] = [
+  ...GEMINI_TTS_PARAMETERS,
+  {
+    id: 'encoding',
+    label: 'Encoding',
+    type: 'select',
+    required: false,
+    options: [
+      { label: 'MP3', value: 'mp3' },
+      { label: 'WAV', value: 'wav' },
+    ],
+    defaultValue: 'mp3',
+  },
+];
+
 export const MODEL_CARDS: ModelCard[] = [
   // ─── Image: GPT-Image 2 (JoyBuilder) ────────────────────────
   {
@@ -1510,6 +1586,39 @@ export const MODEL_CARDS: ModelCard[] = [
     parameters: GEMINI_TTS_PARAMETERS,
     defaultParams: {
       voice_name: 'Kore',
+    },
+    input: { requiresPrompt: true, inputMode: {}, promptModalities: ['text'] },
+    maxRuntimeMs: 5 * 60 * 1000,
+  },
+  {
+    id: 'joybuilder-gemini-2.5-pro-tts',
+    name: 'JoyBuilder Gemini 2.5 Pro TTS',
+    provider: 'JoyBuilder',
+    kind: 'audio',
+    defaultAspectRatio: '1:1',
+    description: 'JoyBuilder TTS wrapper for Gemini 2.5 Pro speech generation.',
+    parameters: JOYBUILDER_GEMINI_TTS_PARAMETERS,
+    defaultParams: {
+      voice_name: 'Kore',
+      encoding: 'mp3',
+    },
+    input: { requiresPrompt: true, inputMode: {}, promptModalities: ['text'] },
+    maxRuntimeMs: 5 * 60 * 1000,
+  },
+  {
+    id: 'joybuilder-doubao-tts',
+    name: 'Doubao TTS',
+    provider: 'JoyBuilder',
+    kind: 'audio',
+    defaultAspectRatio: '1:1',
+    description: 'JoyBuilder Doubao TTS speech generation via base64 audio output.',
+    parameters: JOYBUILDER_TTS_PARAMETERS,
+    defaultParams: {
+      voice_type: 'zh_male_M392_conversation_wvae_bigtts',
+      encoding: 'mp3',
+      speed_ratio: 1,
+      rate: 24000,
+      explicit_language: 'crosslingual',
     },
     input: { requiresPrompt: true, inputMode: {}, promptModalities: ['text'] },
     maxRuntimeMs: 5 * 60 * 1000,

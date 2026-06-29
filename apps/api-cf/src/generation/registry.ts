@@ -1,4 +1,5 @@
 import { isGoogleAudioModel, isGoogleImageModel, isGoogleTextModel, isGoogleVideoModel } from "../services/google-gen";
+import { isJoyBuilderTtsModel } from "../services/joybuilder";
 import type { GenerationParams } from "./params";
 import type { GenerationProvider } from "./provider";
 import { veoProvider } from "./providers/veo";
@@ -10,6 +11,7 @@ import { falImageProvider } from "./providers/fal-image";
 import { klingImageProvider } from "./providers/kling-image";
 import { klingVideoProvider } from "./providers/kling-video";
 import { geminiTtsProvider } from "./providers/gemini-tts";
+import { joyBuilderTtsProvider } from "./providers/joybuilder-tts";
 import { videoRenderProvider } from "./providers/render";
 import { customActionProvider } from "./providers/custom-action";
 import { textGenProvider } from "./providers/text-gen";
@@ -52,10 +54,10 @@ export function resolveProvider(params: GenerationParams): GenerationProvider {
       return falImageProvider;
     }
     case "audio_gen": {
-      if (!isGoogleAudioModel(params.modelName ?? "gemini-3.1-flash-tts")) {
-        throw new Error(`Unsupported audio model: ${params.modelName}`);
-      }
-      return geminiTtsProvider;
+      const model = params.modelName ?? "gemini-3.1-flash-tts";
+      if (isJoyBuilderTtsModel(model)) return joyBuilderTtsProvider;
+      if (isGoogleAudioModel(model)) return geminiTtsProvider;
+      throw new Error(`Unsupported audio model: ${params.modelName}`);
     }
     case "video_render":
       return videoRenderProvider;
