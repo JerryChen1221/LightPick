@@ -443,6 +443,8 @@ interface JoyBuilderQueryResponse {
 interface JoyBuilderTextContent {
   type: "text" | "negative_text";
   text: string;
+  role?: "omni_video";
+  duration?: string;
 }
 
 interface JoyBuilderImageContent {
@@ -451,7 +453,22 @@ interface JoyBuilderImageContent {
   image_url: { url: string };
 }
 
-type JoyBuilderVideoContent = JoyBuilderTextContent | JoyBuilderImageContent;
+interface JoyBuilderVideoUrlContent {
+  type: "video_url";
+  role?: "reference_video";
+  video_url: { url: string };
+}
+
+interface JoyBuilderSubjectContent {
+  type: "subject";
+  subject: string;
+}
+
+type JoyBuilderVideoContent =
+  | JoyBuilderTextContent
+  | JoyBuilderImageContent
+  | JoyBuilderVideoUrlContent
+  | JoyBuilderSubjectContent;
 
 export interface JoyBuilderKlingVideoParams {
   prompt?: string;
@@ -464,6 +481,11 @@ export interface JoyBuilderKlingVideoParams {
   sound?: string | boolean;
   imageUrl?: string;
   endImageUrl?: string;
+  imageUrls?: string[];
+  videoUrls?: string[];
+  videoRole?: string;
+  subjectIds?: string | string[];
+  keepOriginalSound?: string | boolean;
   callbackUrl?: string;
 }
 
@@ -518,8 +540,77 @@ function normalizeKlingSound(sound?: string | boolean): "on" | "off" | undefined
   return undefined;
 }
 
-function videoContent(prompt?: string, negativePrompt?: string): JoyBuilderVideoContent[] {
-  const content: JoyBuilderVideoContent[] = [{ type: "text", text: prompt ?? "" }];
+function normalizeKeepOriginalSound(value?: string | boolean): "yes" | "no" | undefined {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "yes" || normalized === "true" || normalized === "on") return "yes";
+  if (normalized === "no" || normalized === "false" || normalized === "off") return "no";
+  return undefined;
+}
+
+function isJoyBuilderOmniModel(modelName: string | undefined): boolean {
+  return modelName === "Kling-V3-omni";
+}
+
+function parseSubjectIds(input: string | string[] | undefined): string[] {
+  const raw = Array.isArray(input)
+    ? input
+    : typeof input === "string"
+      ? input.split(/[\s,，;；]+/)
+      : [];
+  return raw.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function hasOmniPlaceholder(prompt: string): boolean {
+  return /<<<(?:image|video|element)_\d+>>>/.test(prompt);
+}
+
+function joinPlaceholders(kind: "image" | "video" | "element", count: number): string {
+  return Array.from({ length: count }, (_, idx) => `<<<${kind}_${idx + 1}>>>`).join("、");
+}
+
+function buildOmniPrompt(params: JoyBuilderKlingVideoParams): string {
+  const userPrompt = (params.prompt ?? "").trim();
+  if (!isJoyBuilderOmniModel(params.modelName) || !userPrompt || hasOmniPlaceholder(userPrompt)) {
+    return userPrompt;
+  }
+
+  const videoCount = params.videoUrls?.filter(Boolean).length ?? 0;
+  const imageCount = [
+    params.imageUrl,
+    params.endImageUrl,
+    ...(params.imageUrls ?? []),
+  ].filter(Boolean).length;
+  const subjectCount = parseSubjectIds(params.subjectIds).length;
+  const references: string[] = [];
+  if (imageCount > 0) references.push(`参考图片 ${joinPlaceholders("image", imageCount)}`);
+  if (subjectCount > 0) references.push(`参考主体 ${joinPlaceholders("element", subjectCount)}`);
+
+  if (params.videoRole === "reference_video" && videoCount > 0) {
+    return [
+      `参考${joinPlaceholders("video", videoCount)}的运镜、节奏和视觉风格，生成一段新视频：${userPrompt}`,
+      references.length ? `${references.join("，")}。` : "",
+    ].filter(Boolean).join("。");
+  }
+
+  if (videoCount > 0) {
+    return [
+      `对${joinPlaceholders("video", videoCount)}进行如下编辑：${userPrompt}`,
+      references.length ? `${references.join("，")}。` : "",
+    ].filter(Boolean).join("。");
+  }
+
+  if (references.length > 0) {
+    return `${userPrompt}。${references.join("，")}。`;
+  }
+
+  return userPrompt;
+}
+
+function videoContent(prompt?: string, negativePrompt?: string, role?: "omni_video"): JoyBuilderVideoContent[] {
+  const content: JoyBuilderVideoContent[] = [{ type: "text", text: prompt ?? "", ...(role ? { role } : {}) }];
   if (negativePrompt) content.push({ type: "negative_text", text: negativePrompt });
   return content;
 }
@@ -606,11 +697,15 @@ export async function generateJoyBuilderKlingVideo(
   env: JoyBuilderEnv,
   params: JoyBuilderKlingVideoParams,
 ): Promise<JoyBuilderKlingVideoResult> {
+  const isOmni = isJoyBuilderOmniModel(params.modelName);
   const duration = normalizeKlingDuration(params.duration);
   const resolution = normalizeKlingResolution(params.resolution);
   const mode = normalizeKlingMode(params.mode, resolution);
   const sound = normalizeKlingSound(params.sound);
-  const content = videoContent(params.prompt, params.negativePrompt);
+  const keepOriginalSound = normalizeKeepOriginalSound(params.keepOriginalSound);
+  const hasVideoInput = (params.videoUrls ?? []).some(Boolean);
+  const prompt = buildOmniPrompt(params);
+  const content = videoContent(prompt, params.negativePrompt, isOmni ? "omni_video" : undefined);
 
   if (params.imageUrl) {
     content.push({
@@ -626,6 +721,21 @@ export async function generateJoyBuilderKlingVideo(
       });
     }
   }
+  for (const imageUrl of params.imageUrls ?? []) {
+    if (!imageUrl || imageUrl === params.imageUrl || imageUrl === params.endImageUrl) continue;
+    content.push({ type: "image_url", image_url: { url: imageUrl } });
+  }
+  for (const videoUrl of params.videoUrls ?? []) {
+    if (!videoUrl) continue;
+    content.push({
+      type: "video_url",
+      ...(params.videoRole === "reference_video" ? { role: "reference_video" as const } : {}),
+      video_url: { url: videoUrl },
+    });
+  }
+  for (const subject of parseSubjectIds(params.subjectIds)) {
+    content.push({ type: "subject", subject });
+  }
 
   const payload: Record<string, unknown> = {
     model: params.modelName ?? DEFAULT_JOYBUILDER_KLING_MODEL,
@@ -633,7 +743,8 @@ export async function generateJoyBuilderKlingVideo(
     parameters: {
       mode,
       duration,
-      ...(sound ? { sound } : {}),
+      ...(!hasVideoInput && sound ? { sound } : {}),
+      ...(keepOriginalSound ? { keep_original_sound: keepOriginalSound } : {}),
       ...(!params.imageUrl ? { aspect_ratio: normalizeKlingAspectRatio(params.aspectRatio) } : {}),
     },
   };

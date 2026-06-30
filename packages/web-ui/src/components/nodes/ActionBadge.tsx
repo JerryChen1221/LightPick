@@ -36,6 +36,55 @@ const FALLBACK_MODEL_BY_KIND: Record<BuiltInActionKind, string> = {
     text: 'gpt-5.5',
 };
 
+const splitParamList = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.map(String).map((v) => v.trim()).filter(Boolean);
+    if (typeof value !== 'string') return [];
+    return value.split(/[\n,，;；]+/).map((v) => v.trim()).filter(Boolean);
+};
+
+const compactTextParamValue = (paramId: string, value: unknown): string | null => {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    const count = splitParamList(text).length || 1;
+    if (paramId === 'external_image_urls') return `${count} image URL${count > 1 ? 's' : ''}`;
+    if (paramId === 'external_video_urls') return `${count} video URL${count > 1 ? 's' : ''}`;
+    if (paramId === 'subject_ids') return `${count} subject${count > 1 ? 's' : ''}`;
+    return text.length > 36 ? `${text.slice(0, 34)}...` : text;
+};
+
+const displayParamValue = (param: ModelParameter, value: unknown): string | null => {
+    if (param.type === 'text') return compactTextParamValue(param.id, value);
+    if (param.id === 'duration') return `${value}s`;
+    if (param.id === 'video_role') return value === 'reference_video' ? 'Camera ref' : 'Edit';
+    if (param.id === 'sound') return value ? 'Audio' : 'No audio';
+    if (param.id === 'keep_original_sound') return value ? 'Keep audio' : 'Off';
+    if (param.type === 'select' && param.options) {
+        const opt = param.options.find((o) => String(o.value) === String(value));
+        return opt?.label ?? String(value);
+    }
+    if (param.type === 'boolean') return value ? 'On' : 'Off';
+    if (value === undefined || value === '') return null;
+    return String(value);
+};
+
+const summarizeParamChips = (chips: { value: string; paramId: string }[]): string => {
+    const priority = ['duration', 'aspect_ratio', 'resolution', 'video_role'];
+    const picked: { value: string; paramId: string }[] = [];
+    for (const id of priority) {
+        const chip = chips.find((c) => c.paramId === id);
+        if (chip) picked.push(chip);
+    }
+    for (const chip of chips) {
+        if (picked.length >= 4) break;
+        if (!picked.some((item) => item.paramId === chip.paramId)) picked.push(chip);
+    }
+    const remaining = Math.max(0, chips.length - picked.length);
+    return [
+        ...picked.map((c) => c.value),
+        ...(remaining > 0 ? [`+${remaining}`] : []),
+    ].join(' · ');
+};
+
 // Helper to extract meaningful label from prompt content
 const extractLabelFromPrompt = (promptText: string, fallback: string): string => {
     if (!promptText || promptText.trim() === '') return fallback;
@@ -1408,17 +1457,13 @@ const PromptActionNode = ({ data, selected, id }: NodeProps<RFNode<Record<string
             if (p.id === 'count') return; // count is shown separately as xN chip
             const val = modelParams[p.id] ?? p.defaultValue;
             if (val === undefined) return;
-            if (p.type === 'select' && p.options) {
-                const opt = p.options.find((o: any) => String(o.value) === String(val));
-                chips.push({ label: p.label, value: opt?.label ?? String(val), paramId: p.id });
-            } else if (p.type === 'boolean') {
-                chips.push({ label: p.label, value: val ? 'On' : 'Off', paramId: p.id });
-            } else {
-                chips.push({ label: p.label, value: String(val), paramId: p.id });
-            }
+            if (p.id === 'keep_original_sound' && !val) return;
+            const value = displayParamValue(p as ModelParameter, val);
+            if (value) chips.push({ label: p.label, value, paramId: p.id });
         });
         return chips;
     }, [isCustom, customDef, selectedModel, modelParams]);
+    const paramSummary = useMemo(() => summarizeParamChips(paramChips), [paramChips]);
 
     // Track which param chip has an open dropdown
     const [activeParamDropdown, setActiveParamDropdown] = useState<string | null>(null);
@@ -1719,41 +1764,49 @@ const PromptActionNode = ({ data, selected, id }: NodeProps<RFNode<Record<string
 
                         {/* Combined params chip → opens single popover with all params */}
                         {paramChips.length > 0 && (
-                            <div className="relative flex-shrink-0">
+                            <div className="relative min-w-0 flex-shrink">
                                 <button
-                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors ${
+                                    className={`flex max-w-[320px] items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors ${
                                         activeParamDropdown === '_params' ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
                                     }`}
                                     onClick={(e) => { e.stopPropagation(); setActiveParamDropdown(activeParamDropdown === '_params' ? null : '_params'); setShowModelDropdown(false); }}
                                 >
-                                    <span className="font-medium text-gray-800">
-                                        {paramChips.map((c) => c.value).join(' · ')}
+                                    <span className="min-w-0 truncate font-medium text-gray-800">
+                                        {paramSummary}
                                     </span>
                                     <CaretDown size={10} weight="bold" className="text-gray-400" />
                                 </button>
                                 {activeParamDropdown === '_params' && (
-                                    <div className="absolute left-0 bottom-full mb-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 min-w-[240px] overflow-hidden">
+                                    <div className="absolute left-0 bottom-full mb-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 w-[320px] overflow-hidden">
                                         {((isCustom ? customDef?.parameters : selectedModel?.parameters) ?? []).map((param: any, idx: number) => {
                                             const p = param as ModelParameter;
                                             const currentVal = modelParams[p.id] ?? p.defaultValue;
-                                            const currentLabel = p.type === 'select'
-                                                ? (p.options?.find((o) => String(o.value) === String(currentVal))?.label ?? String(currentVal))
-                                                : p.type === 'boolean' ? (currentVal ? 'On' : 'Off') : String(currentVal);
+                                            const currentLabel = displayParamValue(p, currentVal) ?? 'Not set';
                                             const isExpanded = expandedParam === p.id;
                                             return (
                                                 <div key={p.id} className={idx > 0 ? 'border-t border-slate-100' : ''}>
                                                     <button
-                                                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                                                        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
                                                         onClick={(e) => { e.stopPropagation(); setExpandedParam(isExpanded ? null : p.id); }}
                                                     >
-                                                        <span className="text-xs text-gray-500">{p.label}</span>
-                                                        <span className="flex items-center gap-1 text-xs font-semibold text-gray-900">
-                                                            {currentLabel}
-                                                            <CaretDown size={10} weight="bold" className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                                        <span className="text-xs text-gray-500 flex-shrink-0">{p.label}</span>
+                                                        <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-gray-900">
+                                                            <span className="min-w-0 max-w-[150px] truncate">{currentLabel}</span>
+                                                            <CaretDown size={10} weight="bold" className={`flex-shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                                         </span>
                                                     </button>
                                                     {isExpanded && (
                                                         <div className="px-3 pb-3">
+                                                            {p.type === 'text' && (
+                                                                <textarea
+                                                                    value={String(currentVal ?? '')}
+                                                                    placeholder={p.placeholder}
+                                                                    onChange={(e) => updateModelParam(p.id, e.target.value)}
+                                                                    className="min-h-[76px] w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-xs leading-relaxed text-gray-800 focus:border-gray-400 focus:outline-none"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                />
+                                                            )}
                                                             {(p.type === 'select') && (
                                                                 <div className="flex flex-wrap gap-1.5">
                                                                     {p.options?.map((opt) => (

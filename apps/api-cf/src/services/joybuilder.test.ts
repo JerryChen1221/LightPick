@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { generateJoyBuilderTts, isJoyBuilderTtsModel, type JoyBuilderEnv } from "./joybuilder";
+import {
+  generateJoyBuilderKlingVideo,
+  generateJoyBuilderTts,
+  isJoyBuilderTtsModel,
+  type JoyBuilderEnv,
+} from "./joybuilder";
 
 function base64(bytes: Uint8Array): string {
   let binary = "";
@@ -110,6 +115,169 @@ describe("JoyBuilder TTS generation", () => {
           prebuilt_voice_config: { voice_name: "Kore" },
         },
       },
+    });
+  });
+});
+
+describe("JoyBuilder Kling video generation", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("builds Kling-V3 Omni content with images, video refs, and string subject ids", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: { task_id: "task-omni", status: "pending" },
+            error: { code: 0, type: "", message: "" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            task_status: "success",
+            content: [{ id: "0", video_url: { url: "https://example.test/out.mp4" } }],
+            error: { code: 0, type: "", message: "" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateJoyBuilderKlingVideo(
+      { JOYBUILDER_API_KEY: "test-key", JOYBUILDER_MODEL_SERVICE_URL: "https://modelservice.test" },
+      {
+        modelName: "Kling-V3-omni",
+        prompt: "<<<image_1>>>遇到<<<element_1>>>，参考<<<video_1>>>的运镜。",
+        duration: "7",
+        aspectRatio: "1:1",
+        resolution: "1080P",
+        sound: "on",
+        keepOriginalSound: true,
+        videoRole: "reference_video",
+        imageUrls: ["https://example.test/a.jpg", "https://example.test/b.jpg"],
+        videoUrls: ["https://example.test/ref.mp4"],
+        subjectIds: "864895146134495263, 814623846757576722",
+      },
+    );
+
+    expect(result).toMatchObject({ taskId: "task-omni", url: "https://example.test/out.mp4", duration: 7 });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://modelservice.test/v1/task/submit");
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      model: "Kling-V3-omni",
+      content: [
+        {
+          type: "text",
+          text: "<<<image_1>>>遇到<<<element_1>>>，参考<<<video_1>>>的运镜。",
+          role: "omni_video",
+        },
+        { type: "image_url", image_url: { url: "https://example.test/a.jpg" } },
+        { type: "image_url", image_url: { url: "https://example.test/b.jpg" } },
+        { type: "video_url", role: "reference_video", video_url: { url: "https://example.test/ref.mp4" } },
+        { type: "subject", subject: "864895146134495263" },
+        { type: "subject", subject: "814623846757576722" },
+      ],
+      parameters: {
+        mode: "pro",
+        duration: 7,
+        keep_original_sound: "yes",
+        aspect_ratio: "1:1",
+      },
+    });
+  });
+
+  it("wraps natural-language Omni prompts with connected asset placeholders", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: { task_id: "task-natural", status: "pending" },
+            error: { code: 0, type: "", message: "" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            task_status: "success",
+            content: [{ id: "0", video_url: { url: "https://example.test/natural.mp4" } }],
+            error: { code: 0, type: "", message: "" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await generateJoyBuilderKlingVideo(
+      { JOYBUILDER_API_KEY: "test-key", JOYBUILDER_MODEL_SERVICE_URL: "https://modelservice.test" },
+      {
+        modelName: "Kling-V3-omni",
+        prompt: "给人物戴上这顶王冠",
+        duration: "7",
+        aspectRatio: "1:1",
+        keepOriginalSound: true,
+        videoUrls: ["https://example.test/source.mp4"],
+        imageUrls: ["https://example.test/crown.jpg"],
+      },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).content[0]).toMatchObject({
+      type: "text",
+      role: "omni_video",
+      text: "对<<<video_1>>>进行如下编辑：给人物戴上这顶王冠。参考图片 <<<image_1>>>。",
+    });
+  });
+
+  it("wraps camera-reference Omni prompts without exposing placeholder syntax to users", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: { task_id: "task-camera", status: "pending" },
+            error: { code: 0, type: "", message: "" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            task_status: "success",
+            content: [{ id: "0", video_url: { url: "https://example.test/camera.mp4" } }],
+            error: { code: 0, type: "", message: "" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await generateJoyBuilderKlingVideo(
+      { JOYBUILDER_API_KEY: "test-key", JOYBUILDER_MODEL_SERVICE_URL: "https://modelservice.test" },
+      {
+        modelName: "Kling-V3-omni",
+        prompt: "一个人在东京街头慢慢走过，电影感，暖色调",
+        duration: "7",
+        aspectRatio: "1:1",
+        videoRole: "reference_video",
+        videoUrls: ["https://example.test/reference.mp4"],
+        subjectIds: "864895146134495263",
+      },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).content[0]).toMatchObject({
+      type: "text",
+      role: "omni_video",
+      text: "参考<<<video_1>>>的运镜、节奏和视觉风格，生成一段新视频：一个人在东京街头慢慢走过，电影感，暖色调。参考主体 <<<element_1>>>。",
     });
   });
 });

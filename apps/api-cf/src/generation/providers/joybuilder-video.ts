@@ -10,6 +10,8 @@ async function r2ToPublicUrl(bucket: R2Bucket, key: string, publicBase?: string)
 
 function mapJoyBuilderKlingModel(model?: string): string {
   switch (model) {
+    case "joybuilder-kling-v3-omni":
+      return "Kling-V3-omni";
     case "joybuilder-kling-v3":
       return "kling-v3";
     case "joybuilder-kling-2.5-turbo":
@@ -22,7 +24,19 @@ function joyBuilderKlingSound(model: string | undefined, sound: unknown): string
   if (sound === true) return "on";
   if (sound === false) return "off";
   if (typeof sound === "string" && (sound === "on" || sound === "off")) return sound;
-  return model === "joybuilder-kling-v3" ? "on" : undefined;
+  return model === "joybuilder-kling-v3" || model === "joybuilder-kling-v3-omni" ? "on" : undefined;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(/[\s,，;；]+/).map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function asUrlArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(/[\n,，]+/).map((item) => item.trim()).filter(Boolean);
+  return [];
 }
 
 export const joyBuilderVideoProvider: GenerationProvider = {
@@ -45,13 +59,28 @@ export const joyBuilderVideoProvider: GenerationProvider = {
           mode: isImage2Video ? "i2v" : "t2v",
         });
 
-        const imageR2Key = params.startFrameR2Key ?? params.referenceImageR2Keys?.[0];
+        const externalImageUrls = asUrlArray(params.modelParams?.external_image_urls);
+        const externalVideoUrls = asUrlArray(params.modelParams?.external_video_urls);
+        const shouldResolveImageR2 = externalImageUrls.length === 0 || !!env.R2_PUBLIC_URL;
+        const shouldResolveVideoR2 = externalVideoUrls.length === 0 || !!env.R2_PUBLIC_URL;
+
+        const imageR2Key = shouldResolveImageR2 ? params.startFrameR2Key ?? params.referenceImageR2Keys?.[0] : undefined;
         const imageUrl = imageR2Key
           ? await r2ToPublicUrl(env.R2_BUCKET, imageR2Key, env.R2_PUBLIC_URL)
           : undefined;
-        const endImageUrl = params.endFrameR2Key
+        const endImageUrl = shouldResolveImageR2 && params.endFrameR2Key
           ? await r2ToPublicUrl(env.R2_BUCKET, params.endFrameR2Key, env.R2_PUBLIC_URL)
           : undefined;
+        const imageUrls = shouldResolveImageR2
+          ? await Promise.all(
+            (params.referenceImageR2Keys ?? []).map((key) => r2ToPublicUrl(env.R2_BUCKET, key, env.R2_PUBLIC_URL)),
+          )
+          : [];
+        const videoUrls = shouldResolveVideoR2
+          ? await Promise.all(
+            (params.referenceVideoR2Keys ?? []).map((key) => r2ToPublicUrl(env.R2_BUCKET, key, env.R2_PUBLIC_URL)),
+          )
+          : [];
 
         const result = await generateJoyBuilderKlingVideo(env, {
           prompt: params.prompt,
@@ -63,6 +92,11 @@ export const joyBuilderVideoProvider: GenerationProvider = {
           sound: joyBuilderKlingSound(model, params.modelParams?.sound),
           imageUrl,
           endImageUrl,
+          imageUrls: [...imageUrls, ...externalImageUrls],
+          videoUrls: [...videoUrls, ...externalVideoUrls],
+          videoRole: typeof params.modelParams?.video_role === "string" ? params.modelParams.video_role : undefined,
+          subjectIds: asStringArray(params.modelParams?.subject_ids),
+          keepOriginalSound: params.modelParams?.keep_original_sound as string | boolean | undefined,
         });
 
         log.info("joybuilder-video completed", { ...ctx.tag });

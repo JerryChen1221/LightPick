@@ -51,4 +51,35 @@ describe("PIPELINE_MENU_OPTIONS", () => {
             expect.arrayContaining(["image-gen", "video-gen", "audio-gen", "text-gen", "video-editor"]),
         );
     });
+
+    it("exposes Kling Omni video edit and camera-reference actions for video sources", () => {
+        const videoOptions = PIPELINE_MENU_OPTIONS.filter((option) => option.isCompatibleWithSource("video" as any));
+        expect(videoOptions.map((option) => option.id)).toEqual(
+            expect.arrayContaining(["video-edit", "camera-ref"]),
+        );
+
+        expect(PIPELINE_MENU_OPTIONS.find((option) => option.id === "video-edit")?.getNodeData("video" as any)).toMatchObject({
+            label: "Edit Video",
+            actionType: "video-gen",
+            modelId: "joybuilder-kling-v3-omni",
+            model: "joybuilder-kling-v3-omni",
+            modelParams: {
+                video_role: "input_video",
+                keep_original_sound: true,
+                sound: false,
+            },
+        });
+
+        expect(PIPELINE_MENU_OPTIONS.find((option) => option.id === "camera-ref")?.getNodeData("video" as any)).toMatchObject({
+            label: "Camera Reference",
+            actionType: "video-gen",
+            modelId: "joybuilder-kling-v3-omni",
+            model: "joybuilder-kling-v3-omni",
+            modelParams: {
+                video_role: "reference_video",
+                keep_original_sound: true,
+                sound: false,
+            },
+        });
+    });
 });

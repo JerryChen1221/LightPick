@@ -1,6 +1,7 @@
 import { Image as ImageIcon, VideoCamera, FilmSlate, SpeakerHigh, TextT, PencilSimple, FilmStrip } from '@phosphor-icons/react';
 import {
     capability,
+    MODEL_CARDS,
     pickDefaultModel,
     type Modality,
 } from '@lightpick/shared-types';
@@ -55,6 +56,40 @@ function buildGenNodeData(
     };
 }
 
+function buildKlingOmniNodeData(kind: 'edit' | 'camera-ref'): Record<string, unknown> {
+    const card = MODEL_CARDS.find((item) => item.id === 'joybuilder-kling-v3-omni');
+    const modelId = card?.id ?? 'joybuilder-kling-v3-omni';
+    const baseParams = { ...(card?.defaultParams ?? {}) };
+    if (kind === 'edit') {
+        return {
+            label: 'Edit Video',
+            actionType: 'video-gen',
+            modelId,
+            model: modelId,
+            modelParams: {
+                ...baseParams,
+                video_role: 'input_video',
+                keep_original_sound: true,
+                sound: false,
+            },
+            content: '给视频中的主体做一个清晰可见的编辑，例如添加道具、替换背景或调整风格。',
+        };
+    }
+    return {
+        label: 'Camera Reference',
+        actionType: 'video-gen',
+        modelId,
+        model: modelId,
+        modelParams: {
+            ...baseParams,
+            video_role: 'reference_video',
+            keep_original_sound: true,
+            sound: false,
+        },
+        content: '描述要生成的新主体、场景和动作；系统会自动参考上游视频的运镜、节奏和风格。',
+    };
+}
+
 /**
  * Downstream-action options shared by SourceHandleMenu (on data nodes) and
  * ActionBadgePipelineMenu (on action-badge output handle).
@@ -85,6 +120,22 @@ export const PIPELINE_MENU_OPTIONS: PipelineMenuOption[] = [
             const card = pickDefaultModel({ outputKind: 'video', sourceKind });
             return !!card && capability(card).ref[sourceKind].accepts;
         },
+    },
+    {
+        id: 'video-edit',
+        label: 'Edit Video',
+        icon: FilmSlate,
+        nodeType: 'action-badge',
+        getNodeData: () => buildKlingOmniNodeData('edit'),
+        isCompatibleWithSource: (sourceKind) => sourceKind === 'video',
+    },
+    {
+        id: 'camera-ref',
+        label: 'Use as Camera Reference',
+        icon: VideoCamera,
+        nodeType: 'action-badge',
+        getNodeData: () => buildKlingOmniNodeData('camera-ref'),
+        isCompatibleWithSource: (sourceKind) => sourceKind === 'video',
     },
     {
         id: 'audio-gen',
