@@ -82,7 +82,7 @@ export default defineConfig(({ command }) => ({
     ],
   },
   server: {
-    port: 3001,
+    port: 3000,
     host: "0.0.0.0",
     // Vite restricts dev fs to cwd by default; in our pnpm monorepo,
     // workspace packages (packages/web-ui, etc.) live above apps/web/.
@@ -90,7 +90,7 @@ export default defineConfig(({ command }) => ({
     fs: { allow: [repoRoot] },
   },
   preview: {
-    port: 3001,
+    port: 3000,
   },
   optimizeDeps: {
     // loro-crdt ships a .wasm alongside JS — exclude from esbuild prebundle so

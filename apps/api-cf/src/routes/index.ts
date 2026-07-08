@@ -150,9 +150,6 @@ api.post("/api/generate/video", async (c) => {
     body.image_url ||
     (body.base64_images ?? []).some(Boolean) ||
     (body.reference_image_urls ?? []).some(Boolean);
-  if (!hasImage) {
-    return c.json({ error: "No image provided" }, 400);
-  }
 
   // Resolve primary image to base64
   let primaryBase64: string | undefined;
@@ -168,14 +165,17 @@ api.post("/api/generate/video", async (c) => {
   const urlInputs = await urlPromises;
 
   const imageToUse = primaryBase64 ?? base64Inputs[0] ?? urlInputs[0];
-  if (!imageToUse) {
+  if (hasImage && !imageToUse) {
     return c.json({ error: "Failed to resolve image to base64" }, 400);
   }
 
   // Upload base64 image to R2 to get an R2 key. Routed as a flat reference
   // image — provider (e.g. fal-video for Sora 2) maps it to the i2v anchor
-  // slot internally based on its model id.
-  const imageKey = await uploadBase64Image(c.env.R2_BUCKET, imageToUse, body.project_id);
+  // slot internally based on its model id. If no image was provided, this is
+  // a text-to-video request and provider adapters receive no image refs.
+  const imageKey = imageToUse
+    ? await uploadBase64Image(c.env.R2_BUCKET, imageToUse, body.project_id)
+    : undefined;
 
   // Submit to Workflow (D1 asset created inside workflow on completion)
   const genParams: GenerationParams = {
@@ -184,7 +184,7 @@ api.post("/api/generate/video", async (c) => {
     type: "video_gen",
     projectId: body.project_id,
     prompt: body.prompt,
-    referenceImageR2Keys: [imageKey],
+    referenceImageR2Keys: imageKey ? [imageKey] : undefined,
     duration: body.duration,
     cfgScale: body.cfg_scale,
     videoModel: body.model,
@@ -300,17 +300,13 @@ api.post("/api/tasks/submit", async (c) => {
       }
     }
 
-    if (!imageKey) {
-      return c.json({ error: "No image provided for video generation" }, 400);
-    }
-
     const genParams: GenerationParams = {
       taskId,
       nodeId: node_id,
       type: "video_gen",
       projectId: project_id,
       prompt: params.prompt ?? "",
-      referenceImageR2Keys: [imageKey],
+      referenceImageR2Keys: imageKey ? [imageKey] : undefined,
       duration: params.duration,
       cfgScale: params.cfg_scale,
       videoModel: params.model,

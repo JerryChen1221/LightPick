@@ -278,7 +278,7 @@ describe("Hono routes", () => {
       expect(json.status).toBe("pending");
     });
 
-    it("submits video_gen without image → 400", async () => {
+    it("submits text-to-video without image → 200 { task_id }", async () => {
       (env.R2_BUCKET.get as any).mockResolvedValue(null);
 
       const res = await app.request(
@@ -290,13 +290,16 @@ describe("Hono routes", () => {
             task_type: "video_gen",
             project_id: "proj-1",
             node_id: "node-1",
-            params: { prompt: "a sunset" },
+            params: { prompt: "a sunset", model: "joybuilder-kling-2.5-turbo" },
           }),
         },
         env
       );
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
+      const json: any = await res.json();
+      expect(json.task_id).toBeDefined();
+      expect(json.status).toBe("pending");
     });
 
     it("submits video_thumbnail → 200 completed (no-op)", async () => {

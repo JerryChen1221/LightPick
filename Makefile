@@ -10,6 +10,9 @@
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
 NO_PROXY ?=
+PNPM ?= corepack pnpm
+COREPACK_BIN ?= $(dir $(shell command -v corepack))
+export PATH := $(COREPACK_BIN):$(PATH)
 
 # Service ports (single source of truth)
 # apps/web (Vite + RR7 + CF Vite plugin) is the user-facing entry point on :3000.
@@ -48,7 +51,7 @@ help: ## Show this help message
 
 check-tools: ## Verify required tools are installed
 	@echo "$(BLUE)Checking required tools...$(NC)"
-	@command -v pnpm >/dev/null 2>&1 || { echo "$(RED)Error: pnpm not found.$(NC)"; echo "$(YELLOW)Install: brew install pnpm$(NC)"; exit 1; }
+	@command -v corepack >/dev/null 2>&1 || { echo "$(RED)Error: corepack not found.$(NC)"; echo "$(YELLOW)Install Node.js with Corepack support$(NC)"; exit 1; }
 	@command -v turbo >/dev/null 2>&1 || { echo "$(YELLOW)Warning: turbo not found. Run 'pnpm install' first$(NC)"; }
 	@echo "$(GREEN)✓ All required tools are installed$(NC)"
 
@@ -58,7 +61,7 @@ check-tools: ## Verify required tools are installed
 
 install: check-tools ## Install all dependencies
 	@echo "$(BLUE)Installing TypeScript dependencies...$(NC)"
-	@pnpm install
+	@$(PNPM) install
 	@echo "$(GREEN)✓ Installation complete$(NC)"
 
 #==============================================================================
@@ -67,7 +70,7 @@ install: check-tools ## Install all dependencies
 
 db-web-local: ## Setup/migrate local D1 database for web app
 	@echo "$(BLUE)Setting up local D1 database for web...$(NC)"
-	@cd apps/web && pnpm db:migrate:local
+	@cd apps/web && $(PNPM) db:migrate:local
 
 db-local: db-web-local ## Setup all local D1 databases
 
@@ -79,7 +82,7 @@ dev-web: ## Start web app (Vite + RR7 + Cloudflare Vite plugin) on :3000
 	@echo "$(BLUE)Starting web on http://localhost:$(WEB_PORT)...$(NC)"
 	@cd apps/web && \
 		HTTP_PROXY=$(HTTP_PROXY) HTTPS_PROXY=$(HTTPS_PROXY) NO_PROXY=$(NO_PROXY) \
-		pnpm dev
+		$(PNPM) dev
 
 dev-api-cf: ## (Deprecated) api-cf is started by vite as an auxiliary worker
 	@echo "$(YELLOW)api-cf is spawned by apps/web's vite config (auxiliaryWorkers).$(NC)"
@@ -88,11 +91,11 @@ dev-api-cf: ## (Deprecated) api-cf is started by vite as an auxiliary worker
 
 dev-api-cf-standalone: ## Rare: run api-cf on its own for tests/debugging
 	@echo "$(BLUE)Starting api-cf on http://localhost:$(API_CF_PORT)...$(NC)"
-	@cd apps/api-cf && HTTP_PROXY=$(HTTP_PROXY) HTTPS_PROXY=$(HTTPS_PROXY) NO_PROXY=$(NO_PROXY) pnpm dev
+	@cd apps/api-cf && HTTP_PROXY=$(HTTP_PROXY) HTTPS_PROXY=$(HTTPS_PROXY) NO_PROXY=$(NO_PROXY) $(PNPM) dev
 
 dev-render: ## Start render server (runs outside wrangler — ffmpeg/remotion)
 	@echo "$(BLUE)Starting render server on http://localhost:$(RENDER_PORT)...$(NC)"
-	@cd apps/render-server && HTTP_PROXY=$(HTTP_PROXY) HTTPS_PROXY=$(HTTPS_PROXY) NO_PROXY=$(NO_PROXY) PORT=$(RENDER_PORT) pnpm dev
+	@cd apps/render-server && HTTP_PROXY=$(HTTP_PROXY) HTTPS_PROXY=$(HTTPS_PROXY) NO_PROXY=$(NO_PROXY) PORT=$(RENDER_PORT) $(PNPM) dev
 
 #==============================================================================
 # Combined Development
@@ -126,15 +129,15 @@ dev-full: dev ## Alias for dev
 
 build: check-tools ## Build all packages
 	@echo "$(BLUE)Building TypeScript packages...$(NC)"
-	@pnpm turbo run build
+	@$(PNPM) turbo run build
 
 test: check-tools ## Run all tests
 	@echo "$(BLUE)Running TypeScript tests...$(NC)"
-	@pnpm turbo run test
+	@$(PNPM) turbo run test
 
 test-web: ## Run frontend tests only
 	@echo "$(BLUE)Running frontend tests...$(NC)"
-	@cd apps/web && pnpm test
+	@cd apps/web && $(PNPM) test
 
 #==============================================================================
 # Remotion Bundle & Render
@@ -161,19 +164,19 @@ bundle: remotion-bundle ## Alias for remotion-bundle
 
 lint: check-tools ## Lint all code
 	@echo "$(BLUE)Linting TypeScript...$(NC)"
-	@pnpm turbo run lint
+	@$(PNPM) turbo run lint
 
 lint-web: ## Lint frontend only
 	@echo "$(BLUE)Linting frontend...$(NC)"
-	@cd apps/web && pnpm lint
+	@cd apps/web && $(PNPM) lint
 
 format: check-tools ## Format all code
 	@echo "$(BLUE)Formatting TypeScript...$(NC)"
-	@pnpm prettier --write "**/*.{ts,tsx,json,md}"
+	@$(PNPM) prettier --write "**/*.{ts,tsx,json,md}"
 
 format-check: ## Check if code is formatted (CI use)
 	@echo "$(BLUE)Checking TypeScript formatting...$(NC)"
-	@pnpm prettier --check "**/*.{ts,tsx,json,md}"
+	@$(PNPM) prettier --check "**/*.{ts,tsx,json,md}"
 
 #==============================================================================
 # Deployment (Cloudflare Workers / Pages)
@@ -199,11 +202,11 @@ format-check: ## Check if code is formatted (CI use)
 #   - wrangler must be authenticated; we surface `wrangler whoami` early
 #     so failures don't happen mid-deploy.
 
-WRANGLER ?= pnpm --silent dlx wrangler
+WRANGLER ?= $(PNPM) --silent dlx wrangler
 
 wrangler-whoami: ## Confirm wrangler is logged in (warns, doesn't fail)
 	@echo "$(BLUE)Checking wrangler auth...$(NC)"
-	@cd apps/api-cf && pnpm exec wrangler whoami 2>&1 | tail -3 || \
+	@cd apps/api-cf && $(PNPM) exec wrangler whoami 2>&1 | tail -3 || \
 		echo "$(YELLOW)Not logged in. Run: pnpm exec wrangler login$(NC)"
 
 predeploy-check: ## Run lint before any deploy (skip with SKIP_CHECKS=1)
@@ -218,17 +221,17 @@ deploy-api: predeploy-check ## Deploy api-cf (Workers + RenderContainer image)
 	@echo "$(BLUE)Deploying lightpick-api → Cloudflare Workers...$(NC)"
 	@# `pnpm run deploy` (not `pnpm deploy`) — the latter is pnpm's built-in
 	@# workspace-deployment command and does NOT execute package.json scripts.
-	@cd apps/api-cf && pnpm run deploy
+	@cd apps/api-cf && $(PNPM) run deploy
 	@echo "$(GREEN)✓ api-cf deployed$(NC)"
 
 deploy-web: predeploy-check ## Build + deploy web (Pages/Worker)
 	@echo "$(BLUE)Deploying lightpick-web → Cloudflare...$(NC)"
-	@cd apps/web && pnpm run deploy
+	@cd apps/web && $(PNPM) run deploy
 	@echo "$(GREEN)✓ web deployed$(NC)"
 
 deploy-loro-sync: predeploy-check ## Deploy legacy loro-sync-server (rare)
 	@echo "$(YELLOW)⚠ loro-sync-server is legacy — verify you really want to deploy it.$(NC)"
-	@cd apps/loro-sync-server && pnpm run deploy
+	@cd apps/loro-sync-server && $(PNPM) run deploy
 	@echo "$(GREEN)✓ loro-sync-server deployed$(NC)"
 
 deploy: predeploy-check ## Deploy api-cf then web (the standard production path)
@@ -254,12 +257,12 @@ deploy-all: predeploy-check ## Deploy everything including legacy loro-sync-serv
 
 deploy-api-staging: predeploy-check ## Deploy lightpick-api-staging (uses prod data)
 	@echo "$(BLUE)Deploying lightpick-api-staging → Cloudflare Workers...$(NC)"
-	@cd apps/api-cf && pnpm exec wrangler deploy --env staging
+	@cd apps/api-cf && $(PNPM) exec wrangler deploy --env staging
 	@echo "$(GREEN)✓ api-cf staging deployed$(NC)"
 
 deploy-web-staging: predeploy-check ## Build + deploy lightpick-web-staging (uses prod data)
 	@echo "$(BLUE)Deploying lightpick-web-staging → Cloudflare...$(NC)"
-	@cd apps/web && pnpm build && pnpm exec wrangler deploy --env staging
+	@cd apps/web && $(PNPM) build && $(PNPM) exec wrangler deploy --env staging
 	@echo "$(GREEN)✓ web staging deployed$(NC)"
 
 deploy-staging: predeploy-check ## Deploy api-cf + web staging (in order)
@@ -277,7 +280,7 @@ deploy-staging: predeploy-check ## Deploy api-cf + web staging (in order)
 
 clean: ## Clean all build artifacts and dependencies
 	@echo "$(BLUE)Cleaning TypeScript artifacts...$(NC)"
-	@pnpm clean || true
+	@$(PNPM) clean || true
 	@rm -rf node_modules .turbo
 	@rm -f apps/web/local.db*
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
@@ -293,11 +296,11 @@ clean-all: clean ## Clean everything including all .wrangler directories
 
 deps-tree: ## Show dependency tree for all packages
 	@echo "$(BLUE)TypeScript dependencies:$(NC)"
-	@pnpm list --depth 0
+	@$(PNPM) list --depth 0
 
 update-deps: ## Update all dependencies
 	@echo "$(BLUE)Updating TypeScript dependencies...$(NC)"
-	@pnpm update --latest
+	@$(PNPM) update --latest
 
 info: ## Show project information
 	@echo "$(BLUE)LightPick - Project Information$(NC)"
@@ -307,7 +310,7 @@ info: ## Show project information
 	@echo "Git Status: $$(git status --short 2>/dev/null | wc -l | tr -d ' ') files modified"
 	@echo ""
 	@echo "$(BLUE)Node Version:$(NC) $$(node --version 2>/dev/null || echo 'Not installed')"
-	@echo "$(BLUE)PNPM Version:$(NC) $$(pnpm --version 2>/dev/null || echo 'Not installed')"
+	@echo "$(BLUE)PNPM Version:$(NC) $$($(PNPM) --version 2>/dev/null || echo 'Not installed')"
 	@echo ""
 	@echo "$(BLUE)Environment:$(NC)"
 	@echo "  HTTP_PROXY=$(HTTP_PROXY)"
