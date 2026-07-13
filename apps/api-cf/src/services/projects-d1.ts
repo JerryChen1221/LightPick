@@ -2,15 +2,12 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { DEV_USER_ID } from "./session";
 import type { D1Database } from "@cloudflare/workers-types";
-import { projects, assets } from "../db/app.schema";
+import { projects, assets, assetRefs } from "../db/app.schema";
 import type { ProjectWithAssets } from "@lightpick/web-ui/lib/types";
 import { signAssetPath } from "./asset-signing";
 
-type ApiFetcher = { fetch: (request: Request | string) => Promise<Response> };
 interface Env {
   DB: D1Database;
-  API_CF?: ApiFetcher;
-  API_CF_URL?: string;
   NODE_ENV?: string;
   JWT_SECRET?: string;
 }
@@ -20,22 +17,6 @@ async function ensureDevUser(db: ReturnType<typeof getDb>, env: Env) {
   await db.run(
     sql`INSERT OR IGNORE INTO users (id, name, email, email_verified, created_at, updated_at) VALUES (${DEV_USER_ID}, ${"Dev User"}, ${"dev@local"}, ${0}, ${Date.now()}, ${Date.now()})`,
   );
-}
-
-async function fetchNodes(env: Env, projectId: string): Promise<unknown[]> {
-  try {
-    const path = `/sync/${projectId}/nodes`;
-    if (env.API_CF) {
-      const res = await env.API_CF.fetch(`https://api-cf${path}`);
-      if (res.ok) return (await res.json()) as unknown[];
-    } else if (env.API_CF_URL) {
-      const res = await fetch(`${env.API_CF_URL}${path}`);
-      if (res.ok) return (await res.json()) as unknown[];
-    }
-  } catch {
-    // Ignore — api-cf may be warming up
-  }
-  return [];
 }
 
 export async function listProjectsWithAssets(
@@ -52,59 +33,57 @@ export async function listProjectsWithAssets(
     limit,
   });
 
+  if (projectsData.length === 0) return [];
+
+  // Project cards only need a small visual preview. Read it from asset_refs,
+  // the durable project-to-asset index, instead of reconstructing it from a
+  // live ProjectRoom canvas snapshot. This keeps covers available when the DO
+  // is cold and also covers assets imported without a currently mounted node.
+  const projectIds = projectsData.map((project) => project.id);
+  const rows = await db
+    .select({
+      projectId: assetRefs.projectId,
+      importedAt: assetRefs.importedAt,
+      id: assets.id,
+      kind: assets.kind,
+      srcR2Key: assets.srcR2Key,
+      coverR2Key: assets.coverR2Key,
+    })
+    .from(assetRefs)
+    .innerJoin(assets, eq(assetRefs.assetId, assets.id))
+    .where(inArray(assetRefs.projectId, projectIds))
+    .orderBy(desc(assetRefs.importedAt));
+
+  const rowsByProject = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (row.kind !== "image" && row.kind !== "video") continue;
+    if (row.kind === "video" && !row.coverR2Key) continue;
+    const projectRows = rowsByProject.get(row.projectId) ?? [];
+    if (projectRows.length >= 4) continue;
+    projectRows.push(row);
+    rowsByProject.set(row.projectId, projectRows);
+  }
+
   return Promise.all(
-    projectsData.map(async (project) => {
-      const nodes = await fetchNodes(env, project.id);
-      const mediaNodes = (nodes as any[]).filter(
-        (node) =>
-          (node.type === "image" || node.type === "video") &&
-          typeof node.data?.assetId === "string",
-      );
-      const assetIds = Array.from(
-        new Set(mediaNodes.map((n: any) => n.data.assetId as string)),
-      );
-      const assetRows = assetIds.length
-        ? await db
-            .select({
-              id: assets.id,
-              srcR2Key: assets.srcR2Key,
-              coverR2Key: assets.coverR2Key,
-            })
-            .from(assets)
-            .where(inArray(assets.id, assetIds))
-        : [];
-      const assetById = new Map(assetRows.map((r) => [r.id, r]));
-
-      const projectAssets = await Promise.all(
-        mediaNodes.map(async (node: any) => {
-          const row = assetById.get(node.data.assetId);
-          if (!row) return null;
-          if (node.type === "video" && !row.coverR2Key) return null;
-          const r2Key = node.type === "video" ? row.coverR2Key! : row.srcR2Key;
-          return {
-            id: node.id,
-            url: await signAssetPath(env, r2Key),
-            type: node.type as "image" | "video",
-            storageKey: row.srcR2Key,
-            createdAt: (() => {
-              if (node.data?.createdAt) return new Date(node.data.createdAt);
-              if (node.createdAt) return new Date(node.createdAt);
-              return project.updatedAt || project.createdAt;
-            })(),
-          };
-        }),
-      ).then((arr) => arr.filter((a): a is NonNullable<typeof a> => a !== null));
-
-      return { ...project, assets: projectAssets };
-    }),
+    projectsData.map(async (project) => ({
+      ...project,
+      assets: await Promise.all(
+        (rowsByProject.get(project.id) ?? []).map(async (row) => ({
+          id: row.id,
+          url: await signAssetPath(
+            env,
+            row.kind === "video" ? row.coverR2Key! : row.srcR2Key,
+          ),
+          type: row.kind as "image" | "video",
+          storageKey: row.srcR2Key,
+          createdAt: row.importedAt,
+        })),
+      ),
+    })),
   );
 }
 
-export async function getProjectById(
-  env: Env,
-  userId: string,
-  id: string,
-) {
+export async function getProjectById(env: Env, userId: string, id: string) {
   const db = getDb(env.DB);
   if (userId === DEV_USER_ID) await ensureDevUser(db, env);
   return db.query.projects.findFirst({
@@ -144,11 +123,7 @@ export async function renameProject(
     .where(and(eq(projects.id, id), eq(projects.ownerId, userId)));
 }
 
-export async function removeProject(
-  env: Env,
-  userId: string,
-  id: string,
-) {
+export async function removeProject(env: Env, userId: string, id: string) {
   const db = getDb(env.DB);
   if (userId === DEV_USER_ID) await ensureDevUser(db, env);
   await db
